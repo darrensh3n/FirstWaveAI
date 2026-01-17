@@ -51,7 +51,7 @@ export function SpeechInput({
       recognitionRef.current.interimResults = true
       recognitionRef.current.lang = "en-US"
 
-      recognitionRef.current.onresult = (event) => {
+      recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
         let finalTranscript = ""
         let interimTranscript = ""
 
@@ -68,7 +68,7 @@ export function SpeechInput({
         onTranscriptChange(newText)
       }
 
-      recognitionRef.current.onerror = (event) => {
+      recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error("Speech recognition error:", event.error)
         onStopListening()
       }

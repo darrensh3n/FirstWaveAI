@@ -127,3 +127,29 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Leaflet custom marker styles */
+.custom-marker,
+.user-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: var(--card);
+  color: var(--foreground);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.leaflet-popup-tip {
+  background: var(--card);
+}
+
+.leaflet-popup-close-button {
+  color: var(--muted-foreground) !important;
+}
+
+.leaflet-container {
+  font-family: inherit;
+}

@@ -3,7 +3,27 @@
 import { useEffect, useState, useRef } from "react"
 import { Bot, CheckCircle2, Loader2, AlertTriangle, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Incident, AgentStep } from "./emergency-dashboard"
+
+// Types previously imported from emergency-dashboard
+export type AgentStep = {
+  id: string
+  agent: string
+  title: string
+  description: string
+  status: "pending" | "processing" | "complete" | "error"
+  timestamp?: Date
+  output?: string
+}
+
+export type Incident = {
+  id: string
+  type: string
+  severity: "low" | "medium" | "high" | "critical"
+  location?: string
+  description: string
+  startTime: Date
+  steps: AgentStep[]
+}
 
 interface AgentPanelProps {
   incident: Incident

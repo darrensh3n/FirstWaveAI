@@ -3,7 +3,7 @@
 import { AlertTriangle, MapPin, Clock, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { Incident } from "./emergency-dashboard"
+import type { Incident } from "./agent-panel"
 
 interface IncidentSummaryProps {
   incident: Incident

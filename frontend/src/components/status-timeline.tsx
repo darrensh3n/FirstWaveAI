@@ -2,7 +2,7 @@
 
 import { CheckCircle2, Loader2, Clock, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { AgentStep } from "./emergency-dashboard"
+import type { AgentStep } from "./agent-panel"
 
 interface StatusTimelineProps {
   steps: AgentStep[]
