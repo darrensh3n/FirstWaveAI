@@ -12,6 +12,7 @@ export type DispatchRecommendation = {
   status: "pending" | "approved" | "cancelled"
   specialUnits?: string[]
   needsMoreInfo?: boolean
+  rationale?: string  // Human-readable recommendation sentence
 }
 
 interface DispatchPanelProps {
@@ -59,7 +60,7 @@ export function DispatchPanel({
   isProcessing,
   hasStartedConversation = false,
 }: DispatchPanelProps) {
-  const { ems, fire, police, priority, status, specialUnits, needsMoreInfo } = recommendation
+  const { ems, fire, police, priority, status, specialUnits, needsMoreInfo, rationale } = recommendation
 
   const priorityColors: Record<string, string> = {
     P1: "text-rose-500 bg-rose-500/20",
@@ -124,6 +125,13 @@ export function DispatchPanel({
             <p className="text-xs text-muted-foreground text-center">
               {priorityDescriptions[priority] || "Unknown priority level"}
             </p>
+          </div>
+        )}
+
+        {/* Rationale - Human-readable recommendation */}
+        {rationale && (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+            <p className="text-sm text-foreground leading-relaxed">{rationale}</p>
           </div>
         )}
 

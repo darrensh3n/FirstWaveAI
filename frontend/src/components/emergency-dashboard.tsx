@@ -145,6 +145,7 @@ function EmergencyDashboardContent() {
     priority: null,
     status: "pending",
     specialUnits: [],
+    rationale: undefined,
   })
 
   // AI Summary state
@@ -165,6 +166,7 @@ function EmergencyDashboardContent() {
     priority: null,
     status: "pending",
     specialUnits: [],
+    rationale: undefined,
   })
 
   // Keep ref in sync with state
@@ -277,7 +279,8 @@ function EmergencyDashboardContent() {
           const extractionData = data as ExtractionData
           setSummaryData((prev) => ({
             ...prev,
-            location: extractionData.location || extractionData.address || prev.location,
+            // Hardcoded for demo - always show San Jose State University
+            location: "San Jose State University",
           }))
           break
         }
@@ -327,14 +330,33 @@ function EmergencyDashboardContent() {
               if (typeof val === "number") return val
               return 0
             }
-            updateDispatch((prev) => ({
-              ...prev,
-              ems: toCount(resources.ems),
-              fire: toCount(resources.fire),
-              police: toCount(resources.police),
-              priority: rec.priority || prev.priority,
-              specialUnits: rec.special_units || [],
-            }))
+
+            // SAFETY: Priority can only escalate (P1 > P2 > P3 > P4), never de-escalate
+            // Resources can only be added, never removed
+            // This prevents dangerous de-escalation based on potentially unreliable info
+            const priorityRank: Record<string, number> = { P1: 1, P2: 2, P3: 3, P4: 4 }
+
+            updateDispatch((prev) => {
+              const prevRank = prev.priority ? priorityRank[prev.priority] : 999
+              const newRank = rec.priority ? priorityRank[rec.priority] : 999
+              // Only use new priority if it's higher (lower rank number)
+              const finalPriority = newRank < prevRank
+                ? (rec.priority || null)
+                : (prev.priority || rec.priority || null)
+
+              return {
+                ...prev,
+                // Only add resources, never remove (use Math.max)
+                ems: Math.max(toCount(resources.ems), prev.ems),
+                fire: Math.max(toCount(resources.fire), prev.fire),
+                police: Math.max(toCount(resources.police), prev.police),
+                priority: finalPriority,
+                // Merge special units, don't replace
+                specialUnits: [...new Set([...(prev.specialUnits || []), ...(rec.special_units || [])])],
+                // Always update rationale to reflect latest analysis
+                rationale: rec.rationale || prev.rationale,
+              }
+            })
           }
           break
         }
@@ -631,6 +653,7 @@ function EmergencyDashboardContent() {
       priority: null,
       status: "pending" as const,
       specialUnits: [],
+      rationale: undefined,
     }
     setDispatch(initialDispatch)
     dispatchRef.current = initialDispatch

@@ -307,58 +307,57 @@ def next_question_agent(state: DispatcherState) -> dict:
     model = get_model()
     
     system_prompt = """You are a Next-Question Agent for emergency dispatch.
-Analyze what critical information is missing and suggest the top 3 questions the dispatcher should ask.
+Suggest ONE helpful follow-up question the dispatcher should ask.
 
-Essential information for dispatch includes:
-- Exact location (address, cross streets, apartment number)
-- Nature of emergency (what happened)
-- Number of people involved
-- Injuries and current condition (conscious? breathing?)
-- Hazards (weapons, fire, chemicals)
-- Caller's location (are they safe?)
+=== CRITICAL RULES ===
 
-=== ETHICAL GUIDELINES FOR QUESTIONS ===
+1. NEVER REPEAT A QUESTION THE CALLER ALREADY ANSWERED
+   - If they said "he's not breathing well" - do NOT ask about breathing again
+   - If they gave a location - do NOT ask for the address again
+   - Read the transcript carefully and acknowledge what they've already told you
 
-Your suggested questions MUST follow these ethical principles:
+2. FOR P1/P2 EMERGENCIES: Help is ALREADY being dispatched.
+   - Ask ACTIONABLE questions that help the situation
+   - Focus on: safety, preparing for responders, or additional victims
+   - Good: "Is he on a flat surface in case we need to start CPR?"
+   - Good: "Can someone meet the ambulance at the entrance?"
+   - Good: "Is there anyone else who needs help?"
 
-1. EMPATHETIC & CALMING: Callers are often panicked, traumatized, or in crisis.
-   - Good: "I understand this is stressful. Can you tell me where you are right now?"
-   - Bad: "What's the address? I need the address now."
+3. ACKNOWLEDGE CRITICAL SYMPTOMS when mentioned:
+   - Blue lips, not breathing, unconscious, chest pain, bleeding heavily
+   - These are serious - don't ask redundant questions about them
 
-2. NON-JUDGMENTAL: Never imply blame or make assumptions about the situation.
-   - Good: "Is anyone injured that you can see?"
-   - Bad: "Did you cause this? Were you involved?"
+=== QUESTION TYPES BY SITUATION ===
 
-3. TRAUMA-INFORMED: Be sensitive to potential victims of violence or abuse.
-   - Good: "Are you in a safe place to talk?"
-   - Bad: "Why didn't you leave sooner?"
+Medical emergency (cardiac, breathing):
+- "Is he lying flat on a hard surface?"
+- "Is there a defibrillator (AED) nearby?"
+- "Can someone go outside to flag down the ambulance?"
 
-4. CLEAR & SIMPLE: Use plain language; the caller may be in shock or distress.
-   - Good: "Is the person breathing?"
-   - Bad: "Can you assess their respiratory status?"
+Fire emergency:
+- "Is everyone out of the building?"
+- "Do you know if anyone else is still inside?"
 
-5. SAFETY-FOCUSED: Prioritize getting help to people, not investigating.
-   - Good: "Help is on the way. Is anyone else hurt?"
-   - Bad: "Who started the fight? We need to know who's responsible."
+Violence/Crime:
+- "Are you in a safe location right now?"
+- "Is the person who did this still there?"
 
-6. NON-DISCRIMINATORY: Never ask about:
-   - Immigration status
-   - Insurance or ability to pay
-   - Race, ethnicity, or religion (unless for identifying missing persons)
-   - Housing status or income
+=== ETHICAL GUIDELINES ===
 
-7. RESPECT CALLER AUTONOMY: If caller seems reluctant, don't pressure.
-   - Good: "I want to help you. What can you tell me about where you are?"
-   - Bad: "You have to tell me or I can't send help."
+- EMPATHETIC: Acknowledge their stress. "I know this is scary."
+- SIMPLE: Plain language only. No medical jargon.
+- HELPFUL: Questions should help the situation, not just gather data.
+- NON-DISCRIMINATORY: Never ask about immigration, insurance, race, income.
 
-Respond ONLY with valid JSON in this exact format:
+Respond ONLY with valid JSON:
 {
-    "missing_info": ["list of critical missing information"],
-    "suggested_questions": ["Question 1?", "Question 2?", "Question 3?"],
+    "missing_info": ["only info NOT already provided"],
+    "suggested_questions": ["One actionable, non-redundant question"],
     "info_complete": false
 }
 
-Set info_complete to true ONLY if we have: location, nature of emergency, and patient/victim status."""
+Set info_complete to true if caller has provided: location + what happened + victim status.
+For P1/P2 emergencies, be LENIENT - help is already on the way."""
 
     context = f"""Transcript: {state['transcript']}
 
@@ -702,24 +701,30 @@ def should_dispatch(state: DispatcherState) -> str:
     """
     Routing function to determine if we should proceed to dispatch.
     
-    Only proceeds to dispatch_planner if we have enough critical information:
-    - info_complete is True, OR
-    - We have at minimum: location AND (incident_type is known)
+    For P1/P2 (urgent) emergencies: Dispatch immediately if we know the incident type.
+    Lives may be at stake - don't wait for complete information.
     
-    This prevents premature dispatch recommendations while still allowing
-    dispatch in cases where we have enough info even if not "complete".
+    For P3/P4 (non-urgent): Can wait for more complete information.
     """
-    info_complete = state.get("info_complete", False)
+    severity = state.get("severity")
+    incident_type = state.get("incident_type", "unknown")
+    has_incident = incident_type and incident_type != "unknown"
     
+    # P1/P2 emergencies: Dispatch immediately if we identified an incident
+    # Don't wait for complete info - lives may be at stake
+    if severity in ("P1", "P2") and has_incident:
+        logger.info(f"[router] P1/P2 emergency ({incident_type}) - dispatching immediately")
+        return "dispatch_planner"
+    
+    # Check if info is complete
+    info_complete = state.get("info_complete", False)
     if info_complete:
         logger.info("[router] Info complete - proceeding to dispatch")
         return "dispatch_planner"
     
-    # Check for minimum required info even if not "complete"
+    # For P3/P4: Check for minimum required info
     extracted = state.get("extracted", {})
     has_location = extracted.get("location") is not None
-    incident_type = state.get("incident_type", "unknown")
-    has_incident = incident_type and incident_type != "unknown"
     
     if has_location and has_incident:
         logger.info(f"[router] Minimum info available (location + incident) - proceeding to dispatch")
