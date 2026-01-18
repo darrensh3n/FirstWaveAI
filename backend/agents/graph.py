@@ -7,8 +7,11 @@ and provide dispatch recommendations.
 
 import os
 import json
+import logging
+import traceback
 from pathlib import Path
-from typing import Literal, Annotated
+from typing import Literal, Annotated, Callable, TypeVar
+from functools import wraps
 from typing_extensions import TypedDict
 
 from dotenv import load_dotenv
@@ -17,9 +20,101 @@ from langgraph.graph.message import add_messages
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
+
+
+# =============================================================================
+# Error Handling
+# =============================================================================
+
+class AgentError(Exception):
+    """Custom exception for agent-related errors."""
+    def __init__(self, agent_name: str, message: str, recoverable: bool = True):
+        self.agent_name = agent_name
+        self.message = message
+        self.recoverable = recoverable
+        super().__init__(f"[{agent_name}] {message}")
+
+
+T = TypeVar('T')
+
+
+def with_error_handling(agent_name: str, default_return: dict | Callable[[], dict]):
+    """
+    Decorator that wraps agent functions with error handling.
+    
+    Provides:
+    - Logging of errors
+    - Graceful fallback to default values
+    - Consistent error structure in the response
+    
+    Args:
+        agent_name: Name of the agent for logging
+        default_return: Default dict to return on error, or a callable that returns a dict
+    """
+    def decorator(func: Callable[..., dict]) -> Callable[..., dict]:
+        @wraps(func)
+        def wrapper(*args, **kwargs) -> dict:
+            try:
+                return func(*args, **kwargs)
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    f"[{agent_name}] JSON parsing error: {e}. Using fallback response."
+                )
+                fallback = default_return() if callable(default_return) else default_return
+                return {**fallback, "_error": f"JSON parsing error: {str(e)}"}
+            except ValueError as e:
+                logger.error(f"[{agent_name}] Configuration error: {e}")
+                fallback = default_return() if callable(default_return) else default_return
+                return {**fallback, "_error": f"Configuration error: {str(e)}"}
+            except ConnectionError as e:
+                logger.error(f"[{agent_name}] Connection error: {e}")
+                fallback = default_return() if callable(default_return) else default_return
+                return {**fallback, "_error": f"Connection error: {str(e)}"}
+            except Exception as e:
+                logger.error(
+                    f"[{agent_name}] Unexpected error: {e}\n{traceback.format_exc()}"
+                )
+                fallback = default_return() if callable(default_return) else default_return
+                return {**fallback, "_error": f"Unexpected error: {str(e)}"}
+        return wrapper
+    return decorator
+
+
+def safe_json_parse(content: str, agent_name: str) -> dict | None:
+    """
+    Safely parse JSON content with error logging.
+    
+    Attempts to extract JSON from the content even if it contains
+    extra text before or after the JSON object.
+    """
+    content = content.strip()
+    
+    # Try direct parse first
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        pass
+    
+    # Try to find JSON object in the content
+    try:
+        # Find first { and last }
+        start = content.find('{')
+        end = content.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            json_str = content[start:end + 1]
+            return json.loads(json_str)
+    except json.JSONDecodeError:
+        pass
+    
+    logger.warning(f"[{agent_name}] Could not parse JSON from response: {content[:200]}...")
+    return None
 
 
 # =============================================================================
@@ -36,6 +131,8 @@ def get_model():
         model="llama-3.3-70b-versatile",  # Free tier model
         temperature=0.1,
         api_key=api_key,
+        timeout=30,  # Add timeout to prevent hanging
+        max_retries=2,  # Add retries for transient errors
     )
 
 
@@ -82,6 +179,15 @@ class DispatcherState(TypedDict):
 # Agent Nodes
 # =============================================================================
 
+@with_error_handling("extraction", {
+    "extracted": {
+        "location": None,
+        "injuries": None,
+        "hazards": None,
+        "people_count": None,
+        "caller_info": None,
+    }
+})
 def extraction_agent(state: DispatcherState) -> dict:
     """
     Extraction Agent
@@ -119,14 +225,19 @@ Respond ONLY with valid JSON in this exact format:
         HumanMessage(content=f"Transcript: {state['transcript']}")
     ])
     
-    try:
-        extracted = json.loads(response.content)
-    except json.JSONDecodeError:
-        extracted = {"raw_response": response.content}
+    extracted = safe_json_parse(response.content, "extraction")
+    if extracted is None:
+        extracted = {"raw_response": response.content[:500]}
     
+    logger.info(f"[extraction] Extracted: {list(extracted.keys())}")
     return {"extracted": extracted}
 
 
+@with_error_handling("triage", {
+    "incident_type": "unknown - processing error",
+    "severity": "P2",
+    "key_risks": ["Unable to complete triage - manual review recommended"]
+})
 def triage_agent(state: DispatcherState) -> dict:
     """
     Triage Agent
@@ -163,21 +274,27 @@ Extracted Information: {json.dumps(state.get('extracted', {}), indent=2)}"""
         HumanMessage(content=context)
     ])
     
-    try:
-        result = json.loads(response.content)
-        return {
-            "incident_type": result.get("incident_type", "unknown"),
-            "severity": result.get("severity"),
-            "key_risks": result.get("key_risks", [])
-        }
-    except json.JSONDecodeError:
+    result = safe_json_parse(response.content, "triage")
+    if result is None:
         return {
             "incident_type": "unknown",
             "severity": "P2",
             "key_risks": ["Unable to parse triage response"]
         }
+    
+    logger.info(f"[triage] Incident: {result.get('incident_type')}, Severity: {result.get('severity')}")
+    return {
+        "incident_type": result.get("incident_type", "unknown"),
+        "severity": result.get("severity"),
+        "key_risks": result.get("key_risks", [])
+    }
 
 
+@with_error_handling("next_question", {
+    "missing_info": ["Unable to analyze - manual review needed"],
+    "suggested_questions": ["Can you confirm your exact location?", "Is anyone injured?", "Are you in a safe place?"],
+    "info_complete": False
+})
 def next_question_agent(state: DispatcherState) -> dict:
     """
     Next-Question Agent
@@ -255,21 +372,42 @@ Severity: {state.get('severity', 'unknown')}"""
         HumanMessage(content=context)
     ])
     
-    try:
-        result = json.loads(response.content)
-        return {
-            "missing_info": result.get("missing_info", []),
-            "suggested_questions": result.get("suggested_questions", []),
-            "info_complete": result.get("info_complete", False)
-        }
-    except json.JSONDecodeError:
+    result = safe_json_parse(response.content, "next_question")
+    if result is None:
         return {
             "missing_info": ["Unable to analyze"],
             "suggested_questions": ["Can you confirm your exact location?"],
             "info_complete": False
         }
+    
+    logger.info(f"[next_question] Info complete: {result.get('info_complete')}, Missing: {len(result.get('missing_info', []))} items")
+    return {
+        "missing_info": result.get("missing_info", []),
+        "suggested_questions": result.get("suggested_questions", []),
+        "info_complete": result.get("info_complete", False)
+    }
 
 
+def _get_default_dispatch(state: DispatcherState) -> dict:
+    """Get default dispatch recommendation based on current state."""
+    return {
+        "dispatch_recommendation": {
+            "resources": {"ems": "yes", "fire": "no", "police": "no"},
+            "priority": state.get("severity", "P2"),
+            "rationale": "Default dispatch - manual review recommended",
+            "special_units": []
+        }
+    }
+
+
+@with_error_handling("dispatch_planner", lambda: {
+    "dispatch_recommendation": {
+        "resources": {"ems": "yes", "fire": "no", "police": "no"},
+        "priority": "P2",
+        "rationale": "Default dispatch due to processing error",
+        "special_units": []
+    }
+})
 def dispatch_planner_agent(state: DispatcherState) -> dict:
     """
     Dispatch Planner Agent
@@ -305,20 +443,15 @@ Original Transcript: {state['transcript']}"""
         HumanMessage(content=context)
     ])
     
-    try:
-        result = json.loads(response.content)
-        return {"dispatch_recommendation": result}
-    except json.JSONDecodeError:
-        return {
-            "dispatch_recommendation": {
-                "resources": {"ems": "yes", "fire": "no", "police": "no"},
-                "priority": state.get("severity", "P2"),
-                "rationale": "Default dispatch due to parsing error",
-                "special_units": []
-            }
-        }
+    result = safe_json_parse(response.content, "dispatch_planner")
+    if result is None:
+        return _get_default_dispatch(state)
+    
+    logger.info(f"[dispatch_planner] Resources: {result.get('resources')}, Priority: {result.get('priority')}")
+    return {"dispatch_recommendation": result}
 
 
+@with_error_handling("resource_locator", {"nearest_resources": []})
 def resource_locator_agent(state: DispatcherState) -> dict:
     """
     Resource Locator Tool Agent (MCP-backed)
@@ -333,20 +466,20 @@ def resource_locator_agent(state: DispatcherState) -> dict:
     """
     # Get the resources we need to locate
     dispatch_rec = state.get("dispatch_recommendation", {})
-    resources_needed = dispatch_rec.get("resources", [])
+    resources_needed = dispatch_rec.get("resources", {})
     location = state.get("extracted", {}).get("location", "Unknown location")
     
     # Dummy resource database (replace with MCP calls)
     resource_database = {
-        "EMS": [
+        "ems": [
             {"name": "Medic Unit 7", "station": "Station 7", "distance_miles": 1.2, "eta_minutes": 4},
             {"name": "Ambulance 12", "station": "Central Hospital", "distance_miles": 2.5, "eta_minutes": 7},
         ],
-        "FIRE": [
+        "fire": [
             {"name": "Engine 3", "station": "Fire Station 3", "distance_miles": 0.8, "eta_minutes": 3},
             {"name": "Ladder 1", "station": "Fire Station 1", "distance_miles": 1.5, "eta_minutes": 5},
         ],
-        "POLICE": [
+        "police": [
             {"name": "Unit 42", "station": "Patrol Zone 4", "distance_miles": 0.5, "eta_minutes": 2},
             {"name": "Unit 17", "station": "Patrol Zone 1", "distance_miles": 1.8, "eta_minutes": 6},
         ],
@@ -354,24 +487,50 @@ def resource_locator_agent(state: DispatcherState) -> dict:
     
     # Find nearest resources for each type needed
     nearest_resources = []
-    for resource_type in resources_needed:
-        if resource_type in resource_database:
-            # Get the nearest (first in sorted list)
-            available = resource_database[resource_type]
-            if available:
-                nearest = available[0]
-                nearest_resources.append({
-                    "type": resource_type,
-                    "unit": nearest["name"],
-                    "station": nearest["station"],
-                    "eta_minutes": nearest["eta_minutes"],
-                    "distance_miles": nearest["distance_miles"],
-                    "destination": location
-                })
     
+    # Handle both dict format {"ems": "yes"} and list format ["EMS", "FIRE"]
+    if isinstance(resources_needed, dict):
+        for resource_type, needed in resources_needed.items():
+            if needed == "yes" and resource_type.lower() in resource_database:
+                available = resource_database[resource_type.lower()]
+                if available:
+                    nearest = available[0]
+                    nearest_resources.append({
+                        "type": resource_type.upper(),
+                        "unit": nearest["name"],
+                        "station": nearest["station"],
+                        "eta_minutes": nearest["eta_minutes"],
+                        "distance_miles": nearest["distance_miles"],
+                        "destination": location
+                    })
+    elif isinstance(resources_needed, list):
+        for resource_type in resources_needed:
+            if resource_type.lower() in resource_database:
+                available = resource_database[resource_type.lower()]
+                if available:
+                    nearest = available[0]
+                    nearest_resources.append({
+                        "type": resource_type.upper(),
+                        "unit": nearest["name"],
+                        "station": nearest["station"],
+                        "eta_minutes": nearest["eta_minutes"],
+                        "distance_miles": nearest["distance_miles"],
+                        "destination": location
+                    })
+    
+    logger.info(f"[resource_locator] Found {len(nearest_resources)} nearest resources")
     return {"nearest_resources": nearest_resources}
 
 
+@with_error_handling("safety_guardrail", lambda: {
+    "validated_output": {
+        "is_valid": True,
+        "sanitized_recommendation": {},
+        "flags": ["Safety guardrail processing error - manual review required"],
+        "blocked": False,
+        "block_reason": None
+    }
+})
 def safety_guardrail_agent(state: DispatcherState) -> dict:
     """
     Safety Guardrail Agent
@@ -423,10 +582,8 @@ Key Risks: {', '.join(state.get('key_risks', []))}"""
         HumanMessage(content=context)
     ])
     
-    try:
-        result = json.loads(response.content)
-        return {"validated_output": result}
-    except json.JSONDecodeError:
+    result = safe_json_parse(response.content, "safety_guardrail")
+    if result is None:
         # Fallback: pass through with warning
         return {
             "validated_output": {
@@ -437,8 +594,22 @@ Key Risks: {', '.join(state.get('key_risks', []))}"""
                 "block_reason": None
             }
         }
+    
+    logger.info(f"[safety_guardrail] Valid: {result.get('is_valid')}, Flags: {len(result.get('flags', []))}")
+    return {"validated_output": result}
 
 
+@with_error_handling("after_action_evaluator", {
+    "evaluation_report": {
+        "overall_score": 0,
+        "error": "Unable to generate evaluation",
+        "checklist_scores": {},
+        "what_went_well": [],
+        "what_was_missed": ["Evaluation could not be completed"],
+        "top_improvements": ["Manual review recommended"],
+        "training_notes": "Evaluation system encountered an error"
+    }
+})
 def after_action_evaluator_agent(state: DispatcherState) -> dict:
     """
     After-Action Evaluator Agent
@@ -510,10 +681,8 @@ Resources Assigned: {json.dumps(state.get('nearest_resources', []), indent=2)}""
         HumanMessage(content=context)
     ])
     
-    try:
-        result = json.loads(response.content)
-        return {"evaluation_report": result}
-    except json.JSONDecodeError:
+    result = safe_json_parse(response.content, "after_action_evaluator")
+    if result is None:
         return {
             "evaluation_report": {
                 "overall_score": 0,
@@ -521,11 +690,71 @@ Resources Assigned: {json.dumps(state.get('nearest_resources', []), indent=2)}""
                 "raw_response": response.content[:500]
             }
         }
+    
+    logger.info(f"[after_action_evaluator] Overall score: {result.get('overall_score')}")
+    return {"evaluation_report": result}
 
 
 # =============================================================================
 # Graph Construction
 # =============================================================================
+
+def should_dispatch(state: DispatcherState) -> str:
+    """
+    Routing function to determine if we should proceed to dispatch.
+    
+    Only proceeds to dispatch_planner if we have enough critical information:
+    - info_complete is True, OR
+    - We have at minimum: location AND (incident_type is known)
+    
+    This prevents premature dispatch recommendations while still allowing
+    dispatch in cases where we have enough info even if not "complete".
+    """
+    info_complete = state.get("info_complete", False)
+    
+    if info_complete:
+        logger.info("[router] Info complete - proceeding to dispatch")
+        return "dispatch_planner"
+    
+    # Check for minimum required info even if not "complete"
+    extracted = state.get("extracted", {})
+    has_location = extracted.get("location") is not None
+    incident_type = state.get("incident_type", "unknown")
+    has_incident = incident_type and incident_type != "unknown"
+    
+    if has_location and has_incident:
+        logger.info(f"[router] Minimum info available (location + incident) - proceeding to dispatch")
+        return "dispatch_planner"
+    
+    logger.info("[router] Insufficient info - waiting for more details before dispatch")
+    return "wait_for_info"
+
+
+def wait_for_info_node(state: DispatcherState) -> dict:
+    """
+    Placeholder node when we're waiting for more information.
+    
+    Returns empty dispatch recommendation to signal to frontend
+    that more info is needed before dispatch can be recommended.
+    """
+    return {
+        "dispatch_recommendation": {
+            "status": "pending_info",
+            "resources": {"ems": "no", "fire": "no", "police": "no"},
+            "priority": None,
+            "rationale": "Waiting for more information before making dispatch recommendation",
+            "special_units": [],
+            "needs_more_info": True,
+        },
+        "nearest_resources": [],
+        "validated_output": {
+            "is_valid": False,
+            "status": "pending_info",
+            "message": "More information needed before dispatch recommendation",
+            "blocked": False,
+        }
+    }
+
 
 def build_dispatcher_graph() -> StateGraph:
     """Build and return the dispatcher agent graph."""
@@ -541,16 +770,30 @@ def build_dispatcher_graph() -> StateGraph:
     graph.add_node("resource_locator", resource_locator_agent)
     graph.add_node("safety_guardrail", safety_guardrail_agent)
     graph.add_node("after_action_evaluator", after_action_evaluator_agent)
+    graph.add_node("wait_for_info", wait_for_info_node)
     
     # Define the flow
     graph.add_edge(START, "extraction")
     graph.add_edge("extraction", "triage")
     graph.add_edge("triage", "next_question")  # Always run next_question to detect missing info
-    graph.add_edge("next_question", "dispatch_planner")
     
+    # Conditional edge: only proceed to dispatch if we have enough info
+    graph.add_conditional_edges(
+        "next_question",
+        should_dispatch,
+        {
+            "dispatch_planner": "dispatch_planner",
+            "wait_for_info": "wait_for_info",
+        }
+    )
+    
+    # Dispatch flow
     graph.add_edge("dispatch_planner", "resource_locator")
     graph.add_edge("resource_locator", "safety_guardrail")
     graph.add_edge("safety_guardrail", END)
+    
+    # Wait for info just ends - frontend will prompt for more questions
+    graph.add_edge("wait_for_info", END)
     
     # After-action evaluator runs separately (after call ends)
     # It's not in the main flow - called independently
