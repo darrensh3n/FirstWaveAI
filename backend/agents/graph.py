@@ -168,9 +168,6 @@ class DispatcherState(TypedDict):
     # Guardrail validation
     validated_output: dict
     
-    # After-Action Evaluator
-    evaluation_report: dict
-    
     # Message history for agent reasoning
     messages: Annotated[list, add_messages]
 
@@ -597,102 +594,6 @@ Key Risks: {', '.join(state.get('key_risks', []))}"""
     return {"validated_output": result}
 
 
-@with_error_handling("after_action_evaluator", {
-    "evaluation_report": {
-        "overall_score": 0,
-        "error": "Unable to generate evaluation",
-        "checklist_scores": {},
-        "what_went_well": [],
-        "what_was_missed": ["Evaluation could not be completed"],
-        "top_improvements": ["Manual review recommended"],
-        "training_notes": "Evaluation system encountered an error"
-    }
-})
-def after_action_evaluator_agent(state: DispatcherState) -> dict:
-    """
-    After-Action Evaluator Agent
-    
-    Generates an after-action report comparing dispatcher's actions
-    vs. an ideal checklist:
-    - Score breakdown
-    - What was done well
-    - What was missed
-    - Top improvements
-    """
-    model = get_model()
-    
-    system_prompt = """You are an After-Action Evaluator Agent for emergency dispatch training.
-Generate a training report evaluating how well the call was handled.
-
-Evaluation checklist:
-1. Location confirmed (exact address, cross streets)
-2. Nature of emergency identified
-3. Number of people affected determined
-4. Injuries/medical status assessed (conscious? breathing?)
-5. Hazards identified (weapons, fire, chemicals)
-6. Caller safety confirmed
-7. Appropriate resources dispatched
-8. Priority level matches severity
-9. ETA communicated
-
-Score each item 0-10 and provide overall feedback.
-
-Respond ONLY with valid JSON in this exact format:
-{
-    "overall_score": 85,
-    "checklist_scores": {
-        "location_confirmed": 10,
-        "emergency_identified": 8,
-        "people_count": 5,
-        "medical_status": 7,
-        "hazards_identified": 6,
-        "caller_safety": 4,
-        "resources_appropriate": 9,
-        "priority_correct": 8,
-        "eta_communicated": 10
-    },
-    "what_went_well": ["list of things done well"],
-    "what_was_missed": ["list of things that could be improved"],
-    "top_improvements": ["top 3 actionable improvements for next time"],
-    "training_notes": "Additional notes for dispatcher training"
-}"""
-
-    context = f"""=== CALL SUMMARY ===
-
-Transcript: {state['transcript']}
-
-Extracted Information: {json.dumps(state.get('extracted', {}), indent=2)}
-
-Triage Result:
-- Incident Type: {state.get('incident_type', 'unknown')}
-- Severity: {state.get('severity', 'unknown')}
-- Key Risks: {', '.join(state.get('key_risks', []))}
-
-Missing Information Identified: {', '.join(state.get('missing_info', []))}
-
-Dispatch Decision: {json.dumps(state.get('dispatch_recommendation', {}), indent=2)}
-
-Resources Assigned: {json.dumps(state.get('nearest_resources', []), indent=2)}"""
-
-    response = model.invoke([
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=context)
-    ])
-    
-    result = safe_json_parse(response.content, "after_action_evaluator")
-    if result is None:
-        return {
-            "evaluation_report": {
-                "overall_score": 0,
-                "error": "Unable to generate evaluation",
-                "raw_response": response.content[:500]
-            }
-        }
-    
-    logger.info(f"[after_action_evaluator] Overall score: {result.get('overall_score')}")
-    return {"evaluation_report": result}
-
-
 # =============================================================================
 # Graph Construction
 # =============================================================================
@@ -773,7 +674,6 @@ def build_dispatcher_graph() -> StateGraph:
     graph.add_node("dispatch_planner", dispatch_planner_agent)
     graph.add_node("resource_locator", resource_locator_agent)
     graph.add_node("safety_guardrail", safety_guardrail_agent)
-    graph.add_node("after_action_evaluator", after_action_evaluator_agent)
     graph.add_node("wait_for_info", wait_for_info_node)
     
     # Define the flow
@@ -798,9 +698,6 @@ def build_dispatcher_graph() -> StateGraph:
     
     # Wait for info just ends - frontend will prompt for more questions
     graph.add_edge("wait_for_info", END)
-    
-    # After-action evaluator runs separately (after call ends)
-    # It's not in the main flow - called independently
     
     return graph
 
