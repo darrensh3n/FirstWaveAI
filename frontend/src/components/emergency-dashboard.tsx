@@ -31,7 +31,11 @@ interface NextQuestionData {
 }
 
 interface DispatchPlannerData {
-  resources?: string[]
+  resources?: {
+    ems?: string | number
+    fire?: string | number
+    police?: string | number
+  }
   response_code?: string
   priority?: string
   rationale?: string
@@ -48,7 +52,6 @@ export function EmergencyDashboard() {
   const [currentTranscript, setCurrentTranscript] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
-  const hasProcessedRef = useRef(false)
 
   // AI Summary state
   const [summaryData, setSummaryData] = useState<SummaryData>({
@@ -95,33 +98,6 @@ export function EmergencyDashboard() {
   const handleTranscriptChange = (text: string) => {
     setCurrentTranscript(text)
   }
-
-  // Parse resource counts from dispatch recommendation
-  const parseResourceCounts = useCallback((resources: string[], incidentType?: string) => {
-    const emsCount = resources.filter((r) =>
-      r.toLowerCase().includes("ems") ||
-      r.toLowerCase().includes("ambulance") ||
-      r.toLowerCase().includes("medic")
-    ).length || (resources.some(r => r.toLowerCase().includes("medical")) ? 1 : 0)
-
-    const fireCount = resources.filter((r) =>
-      r.toLowerCase().includes("fire") ||
-      r.toLowerCase().includes("engine") ||
-      r.toLowerCase().includes("ladder")
-    ).length
-
-    const policeCount = resources.filter((r) =>
-      r.toLowerCase().includes("police") ||
-      r.toLowerCase().includes("officer") ||
-      r.toLowerCase().includes("patrol")
-    ).length
-
-    return {
-      ems: emsCount || (incidentType?.toLowerCase().includes("medical") ? 1 : 0),
-      fire: fireCount || (incidentType?.toLowerCase().includes("fire") ? 1 : 0),
-      police: policeCount,
-    }
-  }, [])
 
   // Process each streaming event and update UI accordingly
   const handleStreamEvent = useCallback((event: StreamEvent) => {
@@ -175,12 +151,19 @@ export function EmergencyDashboard() {
         const dispatchData = data as { dispatch_recommendation?: DispatchPlannerData }
         const rec = dispatchData.dispatch_recommendation
         if (rec) {
-          const counts = parseResourceCounts(rec.resources || [])
+          const resources = rec.resources || {}
+          // Convert "yes"/"no" strings to 1/0, or keep numeric values
+          const toCount = (val: string | number | undefined): number => {
+            if (val === "yes") return 1
+            if (val === "no") return 0
+            if (typeof val === "number") return val
+            return 0
+          }
           setDispatch((prev) => ({
             ...prev,
-            ems: counts.ems,
-            fire: counts.fire,
-            police: counts.police,
+            ems: toCount(resources.ems),
+            fire: toCount(resources.fire),
+            police: toCount(resources.police),
             priority: rec.priority || prev.priority,
             specialUnits: rec.special_units || [],
           }))
@@ -198,7 +181,7 @@ export function EmergencyDashboard() {
         break
       }
     }
-  }, [parseResourceCounts])
+  }, [])
 
   const handleSubmit = async (transcript: string) => {
     if (!transcript.trim()) return
@@ -225,12 +208,19 @@ export function EmergencyDashboard() {
     setCurrentAgent(null)
     setSummaryData((prev) => ({ ...prev, isProcessing: true }))
 
+    // Build full conversation transcript for context
+    // Include all previous caller messages plus the new one
+    const allCallerMessages = [...messages, callerMessage]
+      .filter((m) => m.role === "caller")
+      .map((m) => m.content)
+    const fullTranscript = allCallerMessages.join("\n\nCaller: ")
+
     try {
-      // Call the streaming backend endpoint
+      // Call the streaming backend endpoint with full conversation context
       const response = await fetch(`${BACKEND_URL}/dispatch/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript }),
+        body: JSON.stringify({ transcript: `Caller: ${fullTranscript}` }),
       })
 
       if (!response.ok) {
