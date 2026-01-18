@@ -132,6 +132,11 @@ function EmergencyDashboardContent() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [streamError, setStreamError] = useState<StreamError | null>(null)
 
+  // TTS state
+  const [ttsEnabled, setTtsEnabled] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
   // Ref to track current dispatch state for callbacks (avoids stale closures)
   const dispatchRef = useRef<DispatchRecommendation>({
     ems: 0,
@@ -188,7 +193,68 @@ function EmergencyDashboardContent() {
   // Abort controller for canceling requests
   const abortControllerRef = useRef<AbortController | null>(null)
 
+  // TTS playback function
+  const playTTS = useCallback(async (text: string) => {
+    if (!ttsEnabled || !text.trim()) return
+
+    try {
+      setIsSpeaking(true)
+
+      const response = await fetch(`${BACKEND_URL}/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      })
+
+      if (!response.ok) {
+        console.error("TTS request failed:", response.status)
+        return
+      }
+
+      const audioBlob = await response.blob()
+      const audioUrl = URL.createObjectURL(audioBlob)
+
+      // Stop any currently playing audio
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+
+      const audio = new Audio(audioUrl)
+      audioRef.current = audio
+
+      audio.onended = () => {
+        setIsSpeaking(false)
+        URL.revokeObjectURL(audioUrl)
+        audioRef.current = null
+      }
+
+      audio.onerror = () => {
+        console.error("TTS audio playback error")
+        setIsSpeaking(false)
+        URL.revokeObjectURL(audioUrl)
+        audioRef.current = null
+      }
+
+      await audio.play()
+    } catch (error) {
+      console.error("TTS error:", error)
+      setIsSpeaking(false)
+    }
+  }, [ttsEnabled])
+
+  // Stop TTS playback
+  const stopTTS = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
+    setIsSpeaking(false)
+  }, [])
+
   const handleStartListening = () => {
+    // Stop TTS when user starts speaking
+    stopTTS()
     setIsListening(true)
   }
 
@@ -411,21 +477,27 @@ function EmergencyDashboardContent() {
             const { suggested_questions, missing_info, info_complete } = streamStateRef.current
 
             if (suggested_questions.length > 0) {
+              const aiMessageContent = suggested_questions[0]
               const aiMessage: ChatMessage = {
                 id: crypto.randomUUID(),
                 role: "ai",
-                content: suggested_questions[0],
+                content: aiMessageContent,
                 timestamp: new Date(),
               }
               setMessages((prev) => [...prev, aiMessage])
+              // Play TTS for AI response
+              playTTS(aiMessageContent)
             } else if (!info_complete && missing_info.length > 0) {
+              const aiMessageContent = `I need more information about: ${missing_info.join(", ")}. Can you provide more details?`
               const aiMessage: ChatMessage = {
                 id: crypto.randomUUID(),
                 role: "ai",
-                content: `I need more information about: ${missing_info.join(", ")}. Can you provide more details?`,
+                content: aiMessageContent,
                 timestamp: new Date(),
               }
               setMessages((prev) => [...prev, aiMessage])
+              // Play TTS for AI response
+              playTTS(aiMessageContent)
             }
           } else if (eventType === "error") {
             const errorInfo = safeJsonParse<{ error?: string }>(eventData, "error event")
@@ -498,13 +570,15 @@ function EmergencyDashboardContent() {
 
     const unitText = units.length > 0 ? units.join(", ") : "emergency"
 
+    const confirmContent = `Dispatch approved. Sending ${unitText} units to the scene.`
     const confirmMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "ai",
-      content: `✓ Dispatch approved. Sending units to the scene.`,
+      content: confirmContent,
       timestamp: new Date(),
     }
     setMessages((prev) => [...prev, confirmMessage])
+    playTTS(confirmContent)
   }
 
   const handleCancel = () => {
@@ -516,13 +590,15 @@ function EmergencyDashboardContent() {
 
     updateDispatch((prev) => ({ ...prev, status: "cancelled" }))
 
+    const cancelContent = "Dispatch cancelled. Ready for new incident."
     const cancelMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "ai",
-      content: "Dispatch cancelled. Ready for new incident.",
+      content: cancelContent,
       timestamp: new Date(),
     }
     setMessages((prev) => [...prev, cancelMessage])
+    playTTS(cancelContent)
   }
 
   const handleReset = () => {
@@ -531,6 +607,9 @@ function EmergencyDashboardContent() {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
+
+    // Stop any TTS playback
+    stopTTS()
 
     setMessages([])
     setCurrentTranscript("")
@@ -573,6 +652,9 @@ function EmergencyDashboardContent() {
               messages={messages}
               currentTranscript={currentTranscript}
               disabled={isProcessing}
+              ttsEnabled={ttsEnabled}
+              onTtsToggle={setTtsEnabled}
+              isSpeaking={isSpeaking}
             />
           </ErrorBoundary>
         </div>

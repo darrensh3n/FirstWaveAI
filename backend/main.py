@@ -1,14 +1,21 @@
 import json
 import logging
+import os
 import traceback
 from typing import Generator
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, Response
 from pydantic import BaseModel, field_validator
 
 from agents import dispatcher_graph
+
+# Fish Audio TTS configuration
+FISH_AUDIO_API_KEY = os.getenv("FISH_AUDIO_API_KEY")
+FISH_AUDIO_VOICE_ID = os.getenv("FISH_AUDIO_VOICE_ID", "")  # Optional: specific voice
+FISH_AUDIO_API_URL = "https://api.fish.audio/v1/tts"
 
 # Configure logging
 logging.basicConfig(
@@ -64,7 +71,6 @@ async def general_exception_handler(request: Request, exc: Exception):
 # =============================================================================
 
 # Allow configurable origins (comma-separated in env var, or default to localhost)
-import os
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 
 app.add_middleware(
@@ -106,6 +112,20 @@ class DispatchResponse(BaseModel):
     validated_output: dict
 
 
+class TTSRequest(BaseModel):
+    text: str
+    voice_id: str | None = None
+
+    @field_validator('text')
+    @classmethod
+    def validate_text(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('Text cannot be empty')
+        if len(v) > 5000:  # 5KB limit for TTS
+            raise ValueError('Text is too long (max 5,000 characters)')
+        return v.strip()
+
+
 # =============================================================================
 # Health Check Endpoints
 # =============================================================================
@@ -126,6 +146,87 @@ def health_check():
     - Memory usage
     """
     return {"status": "ok", "service": "firstwave-dispatcher"}
+
+
+# =============================================================================
+# Text-to-Speech Endpoint
+# =============================================================================
+
+@app.post("/tts")
+async def text_to_speech(request: TTSRequest):
+    """
+    Convert text to speech using Fish Audio API.
+    
+    Returns audio bytes (MP3 format) that can be played directly.
+    """
+    if not FISH_AUDIO_API_KEY:
+        logger.error("Fish Audio API key not configured")
+        raise APIError(
+            status_code=500,
+            message="TTS service not configured",
+            details="FISH_AUDIO_API_KEY environment variable is not set"
+        )
+    
+    logger.info(f"TTS request (text length: {len(request.text)})")
+    
+    # Use provided voice_id or fall back to configured default
+    voice_id = request.voice_id or FISH_AUDIO_VOICE_ID
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Build request payload
+            payload = {
+                "text": request.text,
+                "format": "mp3",
+            }
+            
+            # Add voice reference if specified
+            if voice_id:
+                payload["reference_id"] = voice_id
+            
+            response = await client.post(
+                FISH_AUDIO_API_URL,
+                headers={
+                    "Authorization": f"Bearer {FISH_AUDIO_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            
+            if response.status_code != 200:
+                error_text = response.text
+                logger.error(f"Fish Audio API error: {response.status_code} - {error_text}")
+                raise APIError(
+                    status_code=502,
+                    message="TTS service error",
+                    details=f"Fish Audio returned {response.status_code}"
+                )
+            
+            # Return audio bytes directly
+            logger.info("TTS audio generated successfully")
+            return Response(
+                content=response.content,
+                media_type="audio/mpeg",
+                headers={
+                    "Content-Disposition": "inline",
+                    "Cache-Control": "no-cache",
+                }
+            )
+            
+    except httpx.TimeoutException:
+        logger.error("Fish Audio API timeout")
+        raise APIError(
+            status_code=504,
+            message="TTS service timeout",
+            details="Fish Audio API took too long to respond"
+        )
+    except httpx.RequestError as e:
+        logger.error(f"Fish Audio API request error: {e}")
+        raise APIError(
+            status_code=502,
+            message="TTS service unavailable",
+            details=str(e)
+        )
 
 
 # =============================================================================

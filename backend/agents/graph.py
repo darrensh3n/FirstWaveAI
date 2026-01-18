@@ -462,7 +462,6 @@ def resource_locator_agent(state: DispatcherState) -> dict:
     - Hospital
     
     Uses dummy map data + ETA estimate.
-    TODO: Replace with actual MCP tool calls (nearest_resources, estimate_eta)
     """
     # Get the resources we need to locate
     dispatch_rec = state.get("dispatch_recommendation", {})

@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
-import { Mic, MicOff, Send, User, Bot, Keyboard, MessageSquare, AlertCircle } from "lucide-react"
+import { Mic, MicOff, Send, User, Bot, Keyboard, MessageSquare, AlertCircle, Volume2, VolumeX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
 export type ChatMessage = {
@@ -22,6 +23,10 @@ interface ChatPanelProps {
   messages: ChatMessage[]
   currentTranscript: string
   disabled?: boolean
+  // TTS props
+  ttsEnabled?: boolean
+  onTtsToggle?: (enabled: boolean) => void
+  isSpeaking?: boolean
 }
 
 // Speech recognition error messages
@@ -43,6 +48,9 @@ export function ChatPanel({
   messages,
   currentTranscript,
   disabled,
+  ttsEnabled = false,
+  onTtsToggle,
+  isSpeaking = false,
 }: ChatPanelProps) {
   const [speechSupported, setSpeechSupported] = useState(true)
   const [useTextInput, setUseTextInput] = useState(false)
@@ -67,6 +75,15 @@ export function ChatPanel({
     }
   }, [])
 
+  // Store callbacks in refs to avoid stale closures and unnecessary effect re-runs
+  const onTranscriptChangeRef = useRef(onTranscriptChange)
+  const onStopListeningRef = useRef(onStopListening)
+  
+  useEffect(() => {
+    onTranscriptChangeRef.current = onTranscriptChange
+    onStopListeningRef.current = onStopListening
+  }, [onTranscriptChange, onStopListening])
+
   // Handle speech recognition lifecycle
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -77,6 +94,10 @@ export function ChatPanel({
     // Cleanup function
     const cleanup = () => {
       if (recognitionRef.current) {
+        // Remove all event handlers first to prevent any callbacks during cleanup
+        recognitionRef.current.onresult = null
+        recognitionRef.current.onerror = null
+        recognitionRef.current.onend = null
         try {
           recognitionRef.current.stop()
         } catch {
@@ -90,15 +111,20 @@ export function ChatPanel({
       // Clear any previous error when starting
       setSpeechError(null)
       intentionalStopRef.current = false
-      accumulatedTranscriptRef.current = currentTranscript
+      // Start fresh - don't use currentTranscript here
+      accumulatedTranscriptRef.current = ""
 
       try {
-        recognitionRef.current = new SpeechRecognition()
-        recognitionRef.current.continuous = true
-        recognitionRef.current.interimResults = true
-        recognitionRef.current.lang = "en-US"
+        const recognition = new SpeechRecognition()
+        recognitionRef.current = recognition
+        recognition.continuous = true
+        recognition.interimResults = true
+        recognition.lang = "en-US"
 
-        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+        recognition.onresult = (event: SpeechRecognitionEvent) => {
+          // Check if we're still supposed to be listening
+          if (intentionalStopRef.current) return
+          
           let finalTranscript = ""
           let interimTranscript = ""
 
@@ -117,10 +143,10 @@ export function ChatPanel({
           }
           
           const displayText = accumulatedTranscriptRef.current + interimTranscript
-          onTranscriptChange(displayText)
+          onTranscriptChangeRef.current(displayText)
         }
 
-        recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+        recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
           console.error("Speech recognition error:", event.error)
           
           // Don't show error for aborted (intentional stop)
@@ -132,37 +158,35 @@ export function ChatPanel({
           setSpeechError(errorMessage)
           
           // Stop listening on error
-          onStopListening()
+          onStopListeningRef.current()
         }
 
-        recognitionRef.current.onend = () => {
+        recognition.onend = () => {
           // If recognition ended unexpectedly (not user-initiated stop),
-          // and we have accumulated text, we could auto-restart or notify
-          if (!intentionalStopRef.current && isListening) {
+          // try to restart if we're still supposed to be listening
+          if (!intentionalStopRef.current) {
             // Recognition ended unexpectedly - this can happen with long pauses
-            // Try to restart if we're still supposed to be listening
             try {
-              recognitionRef.current?.start()
+              recognition.start()
             } catch (error) {
               console.warn("Could not restart speech recognition:", error)
-              onStopListening()
+              onStopListeningRef.current()
             }
           }
         }
 
-        recognitionRef.current.start()
+        recognition.start()
       } catch (error) {
         console.error("Failed to start speech recognition:", error)
         setSpeechError("Failed to start speech recognition. Please try again.")
-        onStopListening()
+        onStopListeningRef.current()
       }
     } else {
-      intentionalStopRef.current = true
       cleanup()
     }
 
     return cleanup
-  }, [isListening, onStopListening, onTranscriptChange, currentTranscript])
+  }, [isListening]) // Only depend on isListening
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -171,15 +195,36 @@ export function ChatPanel({
 
   const handleMicClick = useCallback(() => {
     if (isListening) {
+      // Set flag FIRST to prevent any more processing in callbacks
       intentionalStopRef.current = true
-      onStopListening()
-      // Submit the transcript when stopping
+      
+      // Capture the transcript before stopping
       const transcriptToSubmit = accumulatedTranscriptRef.current.trim()
+      
+      // Stop recognition manually to ensure clean shutdown
+      if (recognitionRef.current) {
+        recognitionRef.current.onresult = null
+        recognitionRef.current.onerror = null
+        recognitionRef.current.onend = null
+        try {
+          recognitionRef.current.stop()
+        } catch {
+          // Ignore errors
+        }
+        recognitionRef.current = null
+      }
+      
+      // Now update state
+      onStopListening()
+      
+      // Submit the transcript if we have content
       if (transcriptToSubmit) {
         onSubmit(transcriptToSubmit)
-        onTranscriptChange("")
-        accumulatedTranscriptRef.current = ""
       }
+      
+      // Clear the transcript display and ref
+      onTranscriptChange("")
+      accumulatedTranscriptRef.current = ""
     } else {
       // Clear any previous error and accumulated transcript
       setSpeechError(null)
@@ -207,11 +252,27 @@ export function ChatPanel({
     // Stop listening if switching to text mode
     if (!useTextInput && isListening) {
       intentionalStopRef.current = true
+      
+      // Clean shutdown of recognition
+      if (recognitionRef.current) {
+        recognitionRef.current.onresult = null
+        recognitionRef.current.onerror = null
+        recognitionRef.current.onend = null
+        try {
+          recognitionRef.current.stop()
+        } catch {
+          // Ignore errors
+        }
+        recognitionRef.current = null
+      }
+      
       onStopListening()
+      onTranscriptChange("")
+      accumulatedTranscriptRef.current = ""
     }
     setSpeechError(null)
     setUseTextInput(!useTextInput)
-  }, [useTextInput, isListening, onStopListening])
+  }, [useTextInput, isListening, onStopListening, onTranscriptChange])
 
   const dismissError = useCallback(() => {
     setSpeechError(null)
@@ -228,7 +289,29 @@ export function ChatPanel({
               {useTextInput ? "Text input mode" : "Voice input mode"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* TTS Toggle */}
+            {onTtsToggle && (
+              <div className="flex items-center gap-1.5">
+                {ttsEnabled ? (
+                  <Volume2 className="w-3.5 h-3.5 text-primary" />
+                ) : (
+                  <VolumeX className="w-3.5 h-3.5 text-muted-foreground" />
+                )}
+                <Switch
+                  checked={ttsEnabled}
+                  onCheckedChange={onTtsToggle}
+                  className="scale-75"
+                />
+              </div>
+            )}
+            {/* Status indicators */}
+            {isSpeaking && (
+              <div className="flex items-center gap-1.5">
+                <Volume2 className="w-3.5 h-3.5 text-primary animate-pulse" />
+                <span className="text-xs text-primary font-medium">Speaking</span>
+              </div>
+            )}
             {isListening && (
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
