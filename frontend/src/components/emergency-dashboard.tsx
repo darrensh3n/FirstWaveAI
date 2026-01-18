@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useCallback } from "react"
 import { ChatPanel, type ChatMessage } from "./chat-panel"
 import { AISummary, type SummaryData } from "./ai-summary"
 import { DispatchPanel, type DispatchRecommendation } from "./dispatch-panel"
@@ -8,21 +8,43 @@ import { NearbyResources } from "./nearby-resources"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
-interface DispatchResult {
-  extracted: Record<string, unknown>
-  incident_type: string
-  severity: string | null
-  key_risks: string[]
-  missing_info: string[]
-  suggested_questions: string[]
-  info_complete: boolean
-  dispatch_recommendation: {
-    resources?: string[]
-    priority?: string
-    special_units?: string[]
+// Types for streaming agent responses
+interface ExtractionData {
+  location?: string | null
+  address?: string | null
+  injuries?: string | null
+  hazards?: string | null
+  people_count?: number | null
+  caller_info?: string | null
+}
+
+interface TriageData {
+  incident_type?: string
+  severity?: string | null
+  key_risks?: string[]
+}
+
+interface NextQuestionData {
+  missing_info?: string[]
+  suggested_questions?: string[]
+  info_complete?: boolean
+}
+
+interface DispatchPlannerData {
+  resources?: {
+    ems?: string | number
+    fire?: string | number
+    police?: string | number
   }
-  nearest_resources: Array<Record<string, unknown>>
-  validated_output: Record<string, unknown>
+  response_code?: string
+  priority?: string
+  rationale?: string
+  special_units?: string[]
+}
+
+interface StreamEvent {
+  agent: string
+  data: ExtractionData | TriageData | NextQuestionData | DispatchPlannerData | Record<string, unknown>
 }
 
 export function EmergencyDashboard() {
@@ -30,7 +52,6 @@ export function EmergencyDashboard() {
   const [currentTranscript, setCurrentTranscript] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
-  const hasProcessedRef = useRef(false)
 
   // AI Summary state
   const [summaryData, setSummaryData] = useState<SummaryData>({
@@ -52,6 +73,20 @@ export function EmergencyDashboard() {
     specialUnits: [],
   })
 
+  // Track which agent is currently processing
+  const [currentAgent, setCurrentAgent] = useState<string | null>(null)
+
+  // Accumulated state from streaming (for suggested questions at the end)
+  const streamStateRef = useRef<{
+    suggested_questions: string[]
+    missing_info: string[]
+    info_complete: boolean
+  }>({
+    suggested_questions: [],
+    missing_info: [],
+    info_complete: false,
+  })
+
   const handleStartListening = () => {
     setIsListening(true)
   }
@@ -63,6 +98,90 @@ export function EmergencyDashboard() {
   const handleTranscriptChange = (text: string) => {
     setCurrentTranscript(text)
   }
+
+  // Process each streaming event and update UI accordingly
+  const handleStreamEvent = useCallback((event: StreamEvent) => {
+    const { agent, data } = event
+    setCurrentAgent(agent)
+
+    switch (agent) {
+      case "extraction": {
+        const extractionData = data as ExtractionData
+        setSummaryData((prev) => ({
+          ...prev,
+          location: extractionData.location || extractionData.address || prev.location,
+        }))
+        break
+      }
+
+      case "triage": {
+        const triageData = data as TriageData
+        setSummaryData((prev) => ({
+          ...prev,
+          incident: triageData.incident_type || prev.incident,
+          priority: triageData.severity || prev.priority,
+          keyFacts: triageData.key_risks || prev.keyFacts,
+        }))
+        // Also update dispatch priority early
+        if (triageData.severity) {
+          setDispatch((prev) => ({
+            ...prev,
+            priority: triageData.severity || prev.priority,
+          }))
+        }
+        break
+      }
+
+      case "next_question": {
+        const questionData = data as NextQuestionData
+        setSummaryData((prev) => ({
+          ...prev,
+          missingInfo: questionData.missing_info || prev.missingInfo,
+        }))
+        // Store for end-of-stream AI message
+        streamStateRef.current = {
+          suggested_questions: questionData.suggested_questions || [],
+          missing_info: questionData.missing_info || [],
+          info_complete: questionData.info_complete || false,
+        }
+        break
+      }
+
+      case "dispatch_planner": {
+        const dispatchData = data as { dispatch_recommendation?: DispatchPlannerData }
+        const rec = dispatchData.dispatch_recommendation
+        if (rec) {
+          const resources = rec.resources || {}
+          // Convert "yes"/"no" strings to 1/0, or keep numeric values
+          const toCount = (val: string | number | undefined): number => {
+            if (val === "yes") return 1
+            if (val === "no") return 0
+            if (typeof val === "number") return val
+            return 0
+          }
+          setDispatch((prev) => ({
+            ...prev,
+            ems: toCount(resources.ems),
+            fire: toCount(resources.fire),
+            police: toCount(resources.police),
+            priority: rec.priority || prev.priority,
+            specialUnits: rec.special_units || [],
+          }))
+        }
+        break
+      }
+
+      case "resource_locator": {
+        // Resource locator provides nearest_resources, could update a separate state if needed
+        break
+      }
+
+      case "safety_guardrail": {
+        // Final validation complete - stream is done
+        break
+      }
+    }
+  }, [])
 
   const handleSubmit = async (transcript: string) => {
     if (!transcript.trim()) return
@@ -77,86 +196,114 @@ export function EmergencyDashboard() {
     setMessages((prev) => [...prev, callerMessage])
     setCurrentTranscript("")
 
+    // Reset stream state
+    streamStateRef.current = {
+      suggested_questions: [],
+      missing_info: [],
+      info_complete: false,
+    }
+
     // Start processing
     setIsProcessing(true)
+    setCurrentAgent(null)
     setSummaryData((prev) => ({ ...prev, isProcessing: true }))
 
+    // Build full conversation transcript for context
+    // Include all previous caller messages plus the new one
+    const allCallerMessages = [...messages, callerMessage]
+      .filter((m) => m.role === "caller")
+      .map((m) => m.content)
+    const fullTranscript = allCallerMessages.join("\n\nCaller: ")
+
     try {
-      // Call the backend dispatch endpoint
-      const response = await fetch(`${BACKEND_URL}/dispatch`, {
+      // Call the streaming backend endpoint with full conversation context
+      const response = await fetch(`${BACKEND_URL}/dispatch/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript }),
+        body: JSON.stringify({ transcript: `Caller: ${fullTranscript}` }),
       })
 
       if (!response.ok) {
         throw new Error(`Backend error: ${response.status}`)
       }
 
-      const result: DispatchResult = await response.json()
-
-      // Update AI Summary
-      const extracted = result.extracted as Record<string, string>
-      setSummaryData({
-        location: extracted.location || extracted.address || null,
-        incident: result.incident_type || null,
-        priority: result.severity || null,
-        keyFacts: result.key_risks || [],
-        missingInfo: result.missing_info || [],
-        isProcessing: false,
-      })
-
-      // Update Dispatch Recommendation
-      const resources = result.dispatch_recommendation?.resources || []
-      const emsCount = resources.filter((r) => 
-        r.toLowerCase().includes("ems") || 
-        r.toLowerCase().includes("ambulance") ||
-        r.toLowerCase().includes("medic")
-      ).length || (resources.some(r => r.toLowerCase().includes("medical")) ? 1 : 0)
-      
-      const fireCount = resources.filter((r) => 
-        r.toLowerCase().includes("fire") || 
-        r.toLowerCase().includes("engine") ||
-        r.toLowerCase().includes("ladder")
-      ).length
-      
-      const policeCount = resources.filter((r) => 
-        r.toLowerCase().includes("police") || 
-        r.toLowerCase().includes("officer") ||
-        r.toLowerCase().includes("patrol")
-      ).length
-
-      setDispatch({
-        ems: emsCount || (result.incident_type?.toLowerCase().includes("medical") ? 1 : 0),
-        fire: fireCount || (result.incident_type?.toLowerCase().includes("fire") ? 1 : 0),
-        police: policeCount,
-        priority: result.severity || null,
-        status: "pending",
-        specialUnits: result.dispatch_recommendation?.special_units || [],
-      })
-
-      // Add AI response message if there are suggested questions
-      if (result.suggested_questions && result.suggested_questions.length > 0) {
-        const aiMessage: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: "ai",
-          content: result.suggested_questions[0],
-          timestamp: new Date(),
-        }
-        setMessages((prev) => [...prev, aiMessage])
-      } else if (!result.info_complete && result.missing_info.length > 0) {
-        const aiMessage: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: "ai",
-          content: `I need more information about: ${result.missing_info.join(", ")}. Can you provide more details?`,
-          timestamp: new Date(),
-        }
-        setMessages((prev) => [...prev, aiMessage])
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error("No response body")
       }
+
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+
+        // Process complete SSE events (separated by double newlines)
+        const events = buffer.split("\n\n")
+        buffer = events.pop() || "" // Keep incomplete event in buffer
+
+        for (const eventText of events) {
+          if (!eventText.trim()) continue
+
+          // Parse SSE format
+          const lines = eventText.split("\n")
+          let eventType = "message"
+          let eventData = ""
+
+          for (const line of lines) {
+            if (line.startsWith("event: ")) {
+              eventType = line.slice(7)
+            } else if (line.startsWith("data: ")) {
+              eventData = line.slice(6)
+            }
+          }
+
+          // Handle different event types
+          if (eventType === "done") {
+            // Stream complete - add AI message if needed
+            const { suggested_questions, missing_info, info_complete } = streamStateRef.current
+
+            if (suggested_questions.length > 0) {
+              const aiMessage: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: "ai",
+                content: suggested_questions[0],
+                timestamp: new Date(),
+              }
+              setMessages((prev) => [...prev, aiMessage])
+            } else if (!info_complete && missing_info.length > 0) {
+              const aiMessage: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: "ai",
+                content: `I need more information about: ${missing_info.join(", ")}. Can you provide more details?`,
+                timestamp: new Date(),
+              }
+              setMessages((prev) => [...prev, aiMessage])
+            }
+          } else if (eventType === "error") {
+            const errorInfo = JSON.parse(eventData)
+            throw new Error(errorInfo.error || "Stream error")
+          } else if (eventData) {
+            // Regular data event
+            try {
+              const parsed: StreamEvent = JSON.parse(eventData)
+              handleStreamEvent(parsed)
+            } catch {
+              console.warn("Failed to parse event data:", eventData)
+            }
+          }
+        }
+      }
+
+      // Mark processing complete
+      setSummaryData((prev) => ({ ...prev, isProcessing: false }))
 
     } catch (error) {
       console.error("Dispatch error:", error)
-      
+
       // Add error message
       const errorMessage: ChatMessage = {
         id: crypto.randomUUID(),
@@ -165,16 +312,17 @@ export function EmergencyDashboard() {
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, errorMessage])
-      
+
       setSummaryData((prev) => ({ ...prev, isProcessing: false }))
     } finally {
       setIsProcessing(false)
+      setCurrentAgent(null)
     }
   }
 
   const handleApprove = () => {
     setDispatch((prev) => ({ ...prev, status: "approved" }))
-    
+
     // Add confirmation message
     const confirmMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -187,7 +335,7 @@ export function EmergencyDashboard() {
 
   const handleCancel = () => {
     setDispatch((prev) => ({ ...prev, status: "cancelled" }))
-    
+
     const cancelMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "ai",

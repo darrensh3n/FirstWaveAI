@@ -184,6 +184,8 @@ def next_question_agent(state: DispatcherState) -> dict:
     
     Proposes top 3 questions the dispatcher should ask next
     based on what's missing (address, breathing status, hazards, etc.)
+    
+    Questions must be ethically appropriate, empathetic, and trauma-informed.
     """
     model = get_model()
     
@@ -197,6 +199,40 @@ Essential information for dispatch includes:
 - Injuries and current condition (conscious? breathing?)
 - Hazards (weapons, fire, chemicals)
 - Caller's location (are they safe?)
+
+=== ETHICAL GUIDELINES FOR QUESTIONS ===
+
+Your suggested questions MUST follow these ethical principles:
+
+1. EMPATHETIC & CALMING: Callers are often panicked, traumatized, or in crisis.
+   - Good: "I understand this is stressful. Can you tell me where you are right now?"
+   - Bad: "What's the address? I need the address now."
+
+2. NON-JUDGMENTAL: Never imply blame or make assumptions about the situation.
+   - Good: "Is anyone injured that you can see?"
+   - Bad: "Did you cause this? Were you involved?"
+
+3. TRAUMA-INFORMED: Be sensitive to potential victims of violence or abuse.
+   - Good: "Are you in a safe place to talk?"
+   - Bad: "Why didn't you leave sooner?"
+
+4. CLEAR & SIMPLE: Use plain language; the caller may be in shock or distress.
+   - Good: "Is the person breathing?"
+   - Bad: "Can you assess their respiratory status?"
+
+5. SAFETY-FOCUSED: Prioritize getting help to people, not investigating.
+   - Good: "Help is on the way. Is anyone else hurt?"
+   - Bad: "Who started the fight? We need to know who's responsible."
+
+6. NON-DISCRIMINATORY: Never ask about:
+   - Immigration status
+   - Insurance or ability to pay
+   - Race, ethnicity, or religion (unless for identifying missing persons)
+   - Housing status or income
+
+7. RESPECT CALLER AUTONOMY: If caller seems reluctant, don't pressure.
+   - Good: "I want to help you. What can you tell me about where you are?"
+   - Bad: "You have to tell me or I can't send help."
 
 Respond ONLY with valid JSON in this exact format:
 {
@@ -248,24 +284,13 @@ def dispatch_planner_agent(state: DispatcherState) -> dict:
     system_prompt = """You are a Dispatch Planner Agent for emergency services.
 Based on the incident information, recommend which resources to dispatch.
 
-Available resources:
-- EMS: Emergency Medical Services (ambulance, paramedics)
-- FIRE: Fire department (engines, ladder trucks, rescue)
-- POLICE: Law enforcement (patrol units, detectives)
+Respond ONLY with valid JSON:
+{"resources": {"ems": "yes", "fire": "no", "police": "yes"}, "priority": "P1", "rationale": "Brief reason", "special_units": []}
 
-Response codes:
-- Code 3: Lights and sirens (life-threatening)
-- Code 2: Urgent, no lights/sirens
-- Code 1: Routine response
-
-Respond ONLY with valid JSON in this exact format:
-{
-    "resources": ["EMS", "FIRE", "POLICE"],
-    "response_code": "Code 3 or Code 2 or Code 1",
-    "priority": "P1 or P2 or P3 or P4",
-    "rationale": "Brief explanation for dispatch decision",
-    "special_units": ["list any special units needed like HAZMAT, K9, SWAT, etc."]
-}"""
+Rules:
+- ems/fire/police: "yes" if needed, "no" if not
+- priority: P1 (life-threatening), P2 (urgent), P3 (non-urgent), P4 (low)
+- special_units: HAZMAT, K9, SWAT if needed, otherwise empty []"""
 
     context = f"""Incident Type: {state.get('incident_type', 'unknown')}
 Severity: {state.get('severity', 'unknown')}
@@ -286,8 +311,7 @@ Original Transcript: {state['transcript']}"""
     except json.JSONDecodeError:
         return {
             "dispatch_recommendation": {
-                "resources": ["EMS"],
-                "response_code": "Code 2",
+                "resources": {"ems": "yes", "fire": "no", "police": "no"},
                 "priority": state.get("severity", "P2"),
                 "rationale": "Default dispatch due to parsing error",
                 "special_units": []
@@ -500,19 +524,6 @@ Resources Assigned: {json.dumps(state.get('nearest_resources', []), indent=2)}""
 
 
 # =============================================================================
-# Routing Logic
-# =============================================================================
-
-def should_continue_questions(state: DispatcherState) -> Literal["next_question", "dispatch_planner"]:
-    """
-    Conditional edge: determine if we need more questions or can proceed to dispatch.
-    """
-    if not state.get("info_complete", False) and state.get("missing_info"):
-        return "next_question"
-    return "dispatch_planner"
-
-
-# =============================================================================
 # Graph Construction
 # =============================================================================
 
@@ -534,19 +545,7 @@ def build_dispatcher_graph() -> StateGraph:
     # Define the flow
     graph.add_edge(START, "extraction")
     graph.add_edge("extraction", "triage")
-    
-    # Conditional: loop for questions or proceed to dispatch
-    graph.add_conditional_edges(
-        "triage",
-        should_continue_questions,
-        {
-            "next_question": "next_question",
-            "dispatch_planner": "dispatch_planner"
-        }
-    )
-    
-    # Next question can loop back to triage (when new info comes in)
-    # For now, we'll route to dispatch after questions are generated
+    graph.add_edge("triage", "next_question")  # Always run next_question to detect missing info
     graph.add_edge("next_question", "dispatch_planner")
     
     graph.add_edge("dispatch_planner", "resource_locator")

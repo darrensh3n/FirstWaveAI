@@ -48,70 +48,70 @@ type Resource = {
   website?: string
 }
 
-// Mock data - in production this would come from an API
+// Mock data - positioned around SJSU for demo purposes
 const mockResources: Resource[] = [
   {
     id: "1",
-    name: "24hr Pharmacy Plus",
+    name: "CVS Pharmacy",
     type: "pharmacy",
-    address: "555 Wellness St, San Jose",
-    distance: 0.4,
-    travelTime: 2,
+    address: "140 E San Carlos St, San Jose",
+    distance: 0.2,
+    travelTime: 1,
     is24Hours: true,
-    lat: 37.3362,
-    lng: -121.8906,
-    phone: "+1-555-0123",
-    website: "https://example.com"
+    lat: 37.3335,
+    lng: -121.8825,
+    phone: "+1-408-294-9134",
+    website: "https://cvs.com"
   },
   {
     id: "2",
-    name: "City General Hospital",
+    name: "Regional Medical Center",
     type: "medical",
-    address: "123 Medical Center Dr, San Jose",
-    distance: 0.8,
-    travelTime: 4,
+    address: "225 N Jackson Ave, San Jose",
+    distance: 0.5,
+    travelTime: 3,
     is24Hours: true,
-    lat: 37.3412,
-    lng: -121.8823,
-    phone: "+1-555-0456",
+    lat: 37.3382,
+    lng: -121.8756,
+    phone: "+1-408-259-5000",
     website: "https://example.com"
   },
   {
     id: "3",
-    name: "Central Police Station",
+    name: "SJPD Downtown Substation",
     type: "police",
-    address: "456 Law Enforcement Ave, San Jose",
-    distance: 1.2,
-    travelTime: 6,
+    address: "201 W Mission St, San Jose",
+    distance: 0.6,
+    travelTime: 3,
     is24Hours: true,
-    lat: 37.3332,
-    lng: -121.8933,
+    lat: 37.3290,
+    lng: -121.8892,
     phone: "911",
-    website: "https://example.com"
+    website: "https://sjpd.org"
   },
   {
     id: "4",
-    name: "Fire Station #7",
+    name: "Fire Station #1",
     type: "fire",
-    address: "789 Emergency Response Blvd, San Jose",
-    distance: 1.5,
-    travelTime: 7,
+    address: "225 N Market St, San Jose",
+    distance: 0.7,
+    travelTime: 4,
     is24Hours: true,
-    lat: 37.3402,
-    lng: -121.8793,
+    lat: 37.3398,
+    lng: -121.8895,
     phone: "911"
   },
   {
     id: "5",
-    name: "Downtown Medical Clinic",
+    name: "Student Health Center",
     type: "medical",
-    address: "321 Healthcare Ave, San Jose",
-    distance: 2.1,
-    travelTime: 10,
+    address: "1 Washington Sq, San Jose",
+    distance: 0.1,
+    travelTime: 1,
     is24Hours: false,
-    lat: 37.3352,
-    lng: -121.8953,
-    phone: "+1-555-0789"
+    lat: 37.3360,
+    lng: -121.8820,
+    phone: "+1-408-924-6120"
   },
 ]
 
@@ -142,12 +142,20 @@ const resourceTypeConfig = {
   },
 }
 
+// Demo mode: Hardcoded caller location at San Jose State University
+const DEMO_CALLER_LOCATION = {
+  lat: 37.3352,
+  lng: -121.8811,
+  name: "San Jose State University"
+}
+
 export function NearbyResources() {
-  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null)
+  // For demo: Start with SJSU location already set
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(DEMO_CALLER_LOCATION)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [selectedFilter, setSelectedFilter] = useState<ResourceType | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
-  const [locationEnabled, setLocationEnabled] = useState(false)
+  const [locationEnabled, setLocationEnabled] = useState(true) // Default enabled for demo
   const [isLocating, setIsLocating] = useState(false)
 
   const handleLocationToggle = (enabled: boolean) => {
@@ -249,7 +257,7 @@ export function NearbyResources() {
               {isLocating 
                 ? 'Detecting location...' 
                 : locationEnabled && userLocation 
-                  ? 'Location detected' 
+                  ? `Caller location: ${DEMO_CALLER_LOCATION.name}` 
                   : locationError 
                     ? locationError 
                     : 'Share your location for nearby results'}

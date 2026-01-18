@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Mic, MicOff, Send, User, Bot } from "lucide-react"
+import { Mic, MicOff, Send, User, Bot, Keyboard, MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
 export type ChatMessage = {
@@ -34,8 +35,11 @@ export function ChatPanel({
   disabled,
 }: ChatPanelProps) {
   const [speechSupported, setSpeechSupported] = useState(true)
+  const [useTextInput, setUseTextInput] = useState(false)
+  const [textInput, setTextInput] = useState("")
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -108,6 +112,28 @@ export function ChatPanel({
     }
   }
 
+  const handleTextSubmit = () => {
+    if (textInput.trim() && !disabled) {
+      onSubmit(textInput.trim())
+      setTextInput("")
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleTextSubmit()
+    }
+  }
+
+  const toggleInputMode = () => {
+    // Stop listening if switching to text mode
+    if (!useTextInput && isListening) {
+      onStopListening()
+    }
+    setUseTextInput(!useTextInput)
+  }
+
   return (
     <div className="rounded-xl border border-border bg-card h-full flex flex-col">
       {/* Header */}
@@ -115,14 +141,31 @@ export function ChatPanel({
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-foreground text-sm">Caller ↔ AI Chat</h3>
-            <p className="text-xs text-muted-foreground">Voice & text conversation</p>
+            <p className="text-xs text-muted-foreground">
+              {useTextInput ? "Text input mode" : "Voice input mode"}
+            </p>
           </div>
-          {isListening && (
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-              <span className="text-xs text-rose-500 font-medium">Recording</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {isListening && (
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                <span className="text-xs text-rose-500 font-medium">Recording</span>
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleInputMode}
+              className="text-muted-foreground hover:text-foreground"
+              title={useTextInput ? "Switch to voice" : "Switch to text"}
+            >
+              {useTextInput ? (
+                <MessageSquare className="w-4 h-4" />
+              ) : (
+                <Keyboard className="w-4 h-4" />
+              )}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -187,34 +230,61 @@ export function ChatPanel({
 
       {/* Input Area */}
       <div className="p-4 border-t border-border flex-shrink-0">
-        <div className="flex items-center justify-center">
-          <Button
-            onClick={handleMicClick}
-            disabled={disabled || !speechSupported}
-            size="lg"
-            variant={isListening ? "destructive" : "default"}
-            className={cn(
-              "gap-2 px-6 transition-all",
-              isListening && "animate-pulse"
+        {useTextInput ? (
+          /* Text Input Mode */
+          <div className="flex gap-2">
+            <Textarea
+              ref={textareaRef}
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type your message here... (Enter to send)"
+              disabled={disabled}
+              className="min-h-[44px] max-h-[120px] resize-none bg-secondary/50"
+              rows={1}
+            />
+            <Button
+              onClick={handleTextSubmit}
+              disabled={disabled || !textInput.trim()}
+              size="icon"
+              className="flex-shrink-0 h-[44px] w-[44px]"
+            >
+              <Send className="w-5 h-5" />
+            </Button>
+          </div>
+        ) : (
+          /* Voice Input Mode */
+          <>
+            <div className="flex items-center justify-center">
+              <Button
+                onClick={handleMicClick}
+                disabled={disabled || !speechSupported}
+                size="lg"
+                variant={isListening ? "destructive" : "default"}
+                className={cn(
+                  "gap-2 px-6 transition-all",
+                  isListening && "animate-pulse"
+                )}
+              >
+                {isListening ? (
+                  <>
+                    <MicOff className="w-5 h-5" />
+                    Stop Listening
+                  </>
+                ) : (
+                  <>
+                    <Mic className="w-5 h-5" />
+                    Start Listening
+                  </>
+                )}
+              </Button>
+            </div>
+            {!speechSupported && (
+              <p className="text-xs text-center text-muted-foreground mt-2">
+                Speech recognition not supported in this browser
+              </p>
             )}
-          >
-            {isListening ? (
-              <>
-                <MicOff className="w-5 h-5" />
-                Stop Listening
-              </>
-            ) : (
-              <>
-                <Mic className="w-5 h-5" />
-                Start Listening
-              </>
-            )}
-          </Button>
-        </div>
-        {!speechSupported && (
-          <p className="text-xs text-center text-muted-foreground mt-2">
-            Speech recognition not supported in this browser
-          </p>
+          </>
         )}
       </div>
     </div>

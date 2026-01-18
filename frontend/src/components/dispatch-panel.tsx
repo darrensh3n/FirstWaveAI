@@ -21,17 +21,18 @@ interface DispatchPanelProps {
   isProcessing: boolean
 }
 
-function ResourceCount({ 
-  icon: Icon, 
-  label, 
-  count, 
-  color 
-}: { 
+function ResourceCount({
+  icon: Icon,
+  label,
+  count,
+  color
+}: {
   icon: React.ElementType
   label: string
   count: number
   color: string
 }) {
+  const isNeeded = count > 0
   return (
     <div className="flex items-center justify-between py-2">
       <div className="flex items-center gap-2">
@@ -39,21 +40,21 @@ function ResourceCount({
         <span className="text-sm text-foreground">{label}</span>
       </div>
       <span className={cn(
-        "text-lg font-bold tabular-nums",
-        count > 0 ? color : "text-muted-foreground"
+        "text-sm font-semibold",
+        isNeeded ? color : "text-muted-foreground"
       )}>
-        {count}
+        {isNeeded ? "Yes" : "No"}
       </span>
     </div>
   )
 }
 
-export function DispatchPanel({ 
-  recommendation, 
-  onApprove, 
-  onCancel, 
+export function DispatchPanel({
+  recommendation,
+  onApprove,
+  onCancel,
   onOverride,
-  isProcessing 
+  isProcessing
 }: DispatchPanelProps) {
   const { ems, fire, police, priority, status, specialUnits } = recommendation
 
@@ -62,6 +63,13 @@ export function DispatchPanel({
     P2: "text-orange-500 bg-orange-500/20",
     P3: "text-amber-500 bg-amber-500/20",
     P4: "text-emerald-500 bg-emerald-500/20",
+  }
+
+  const priorityDescriptions: Record<string, string> = {
+    P1: "Life-threatening, immediate response",
+    P2: "Urgent, serious but stable",
+    P3: "Non-urgent, needs response",
+    P4: "Low priority, can wait",
   }
 
   const statusConfig = {
@@ -102,7 +110,7 @@ export function DispatchPanel({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Priority Badge */}
         {priority && (
-          <div className="flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center gap-1">
             <div className={cn(
               "px-4 py-2 rounded-lg text-center",
               priorityColors[priority] || "text-muted-foreground bg-muted"
@@ -110,6 +118,9 @@ export function DispatchPanel({
               <p className="text-xs uppercase tracking-wider opacity-80">Priority</p>
               <p className="text-2xl font-bold">{priority}</p>
             </div>
+            <p className="text-xs text-muted-foreground text-center">
+              {priorityDescriptions[priority] || "Unknown priority level"}
+            </p>
           </div>
         )}
 
@@ -117,23 +128,23 @@ export function DispatchPanel({
         <div className="rounded-lg border border-border bg-secondary/30 p-3">
           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Recommended</p>
           <div className="divide-y divide-border">
-            <ResourceCount 
-              icon={Ambulance} 
-              label="EMS" 
-              count={ems} 
-              color="text-rose-500" 
+            <ResourceCount
+              icon={Ambulance}
+              label="EMS"
+              count={ems}
+              color="text-rose-500"
             />
-            <ResourceCount 
-              icon={Flame} 
-              label="Fire" 
-              count={fire} 
-              color="text-orange-500" 
+            <ResourceCount
+              icon={Flame}
+              label="Fire"
+              count={fire}
+              color="text-orange-500"
             />
-            <ResourceCount 
-              icon={Shield} 
-              label="Police" 
-              count={police} 
-              color="text-sky-500" 
+            <ResourceCount
+              icon={Shield}
+              label="Police"
+              count={police}
+              color="text-sky-500"
             />
           </div>
         </div>
@@ -179,7 +190,7 @@ export function DispatchPanel({
         <div className="flex gap-2">
           <Button
             onClick={onApprove}
-            disabled={isProcessing || status !== "pending" || (!ems && !fire && !police)}
+            disabled={isProcessing || status !== "pending" || !priority}
             className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
           >
             <Check className="w-4 h-4 mr-2" />
@@ -187,7 +198,7 @@ export function DispatchPanel({
           </Button>
           <Button
             onClick={onCancel}
-            disabled={isProcessing || status !== "pending"}
+            disabled={isProcessing || status !== "pending" || !priority}
             variant="outline"
             className="flex-1 border-destructive/50 text-destructive hover:bg-destructive/10"
           >

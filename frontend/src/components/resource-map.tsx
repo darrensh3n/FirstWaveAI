@@ -70,7 +70,7 @@ function MapUpdater({ center }: { center: [number, number] }) {
 export default function ResourceMap({ resources, userLocation, className = "" }: Props) {
   const defaultCenter: [number, number] = userLocation 
     ? [userLocation.lat, userLocation.lng] 
-    : [37.3382, -121.8863] // Downtown San Jose default
+    : [37.3352, -121.8811] // San Jose State University (demo default)
 
   return (
     <MapContainer
@@ -88,7 +88,9 @@ export default function ResourceMap({ resources, userLocation, className = "" }:
       {userLocation && (
         <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon}>
           <Popup>
-            <span className="font-medium">Your location</span>
+            <span className="font-medium">Caller&apos;s Location</span>
+            <br />
+            <span className="text-xs text-gray-600">San Jose State University</span>
           </Popup>
         </Marker>
       )}
