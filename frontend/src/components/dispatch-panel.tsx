@@ -1,6 +1,6 @@
 "use client"
 
-import { Ambulance, Flame, Shield, AlertTriangle, Check, X, Settings2 } from "lucide-react"
+import { Ambulance, Flame, Shield, AlertTriangle, Check, X, Settings2, MessageCircleQuestion } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -11,6 +11,7 @@ export type DispatchRecommendation = {
   priority: string | null
   status: "pending" | "approved" | "cancelled"
   specialUnits?: string[]
+  needsMoreInfo?: boolean
 }
 
 interface DispatchPanelProps {
@@ -19,6 +20,7 @@ interface DispatchPanelProps {
   onCancel: () => void
   onOverride?: () => void
   isProcessing: boolean
+  hasStartedConversation?: boolean
 }
 
 function ResourceCount({
@@ -54,9 +56,10 @@ export function DispatchPanel({
   onApprove,
   onCancel,
   onOverride,
-  isProcessing
+  isProcessing,
+  hasStartedConversation = false,
 }: DispatchPanelProps) {
-  const { ems, fire, police, priority, status, specialUnits } = recommendation
+  const { ems, fire, police, priority, status, specialUnits, needsMoreInfo } = recommendation
 
   const priorityColors: Record<string, string> = {
     P1: "text-rose-500 bg-rose-500/20",
@@ -167,8 +170,24 @@ export function DispatchPanel({
           </div>
         )}
 
-        {/* Empty State */}
-        {!isProcessing && ems === 0 && fire === 0 && police === 0 && !priority && (
+        {/* Empty State - Waiting for more info */}
+        {!isProcessing && ems === 0 && fire === 0 && police === 0 && !priority && hasStartedConversation && (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <div className="w-12 h-12 rounded-full bg-sky-500/20 flex items-center justify-center mb-3">
+              <MessageCircleQuestion className="w-6 h-6 text-sky-500" />
+            </div>
+            <p className="text-sm font-medium text-foreground">Gathering Information</p>
+            <p className="text-xs text-muted-foreground mt-1 max-w-[200px]">
+              More details needed before dispatch recommendation
+            </p>
+            <p className="text-xs text-sky-500 mt-2">
+              Answer the questions in the chat
+            </p>
+          </div>
+        )}
+
+        {/* Empty State - Not started */}
+        {!isProcessing && ems === 0 && fire === 0 && police === 0 && !priority && !hasStartedConversation && (
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <AlertTriangle className="w-8 h-8 text-muted-foreground/50 mb-2" />
             <p className="text-sm text-muted-foreground">No recommendation yet</p>

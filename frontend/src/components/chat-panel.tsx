@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { Mic, MicOff, Send, User, Bot, Keyboard, MessageSquare } from "lucide-react"
+import { useEffect, useRef, useState, useCallback } from "react"
+import { Mic, MicOff, Send, User, Bot, Keyboard, MessageSquare, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
@@ -24,6 +24,16 @@ interface ChatPanelProps {
   disabled?: boolean
 }
 
+// Speech recognition error messages
+const SPEECH_ERROR_MESSAGES: Record<string, string> = {
+  "no-speech": "No speech detected. Please try speaking again.",
+  "audio-capture": "Microphone not available. Please check your microphone settings.",
+  "not-allowed": "Microphone permission denied. Please allow microphone access.",
+  "network": "Network error. Please check your internet connection.",
+  "aborted": "Speech recognition was interrupted.",
+  "service-not-allowed": "Speech recognition service is not available.",
+}
+
 export function ChatPanel({
   isListening,
   onStartListening,
@@ -37,10 +47,17 @@ export function ChatPanel({
   const [speechSupported, setSpeechSupported] = useState(true)
   const [useTextInput, setUseTextInput] = useState(false)
   const [textInput, setTextInput] = useState("")
+  const [speechError, setSpeechError] = useState<string | null>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  
+  // Use ref to track accumulated transcript to avoid stale closure issues
+  const accumulatedTranscriptRef = useRef("")
+  // Track if we're intentionally stopping (vs natural end)
+  const intentionalStopRef = useRef(false)
 
+  // Check for speech recognition support
   useEffect(() => {
     if (typeof window !== "undefined") {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -50,89 +67,155 @@ export function ChatPanel({
     }
   }, [])
 
+  // Handle speech recognition lifecycle
   useEffect(() => {
     if (typeof window === "undefined") return
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SpeechRecognition) return
 
+    // Cleanup function
+    const cleanup = () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop()
+        } catch {
+          // Ignore errors when stopping
+        }
+        recognitionRef.current = null
+      }
+    }
+
     if (isListening) {
-      recognitionRef.current = new SpeechRecognition()
-      recognitionRef.current.continuous = true
-      recognitionRef.current.interimResults = true
-      recognitionRef.current.lang = "en-US"
+      // Clear any previous error when starting
+      setSpeechError(null)
+      intentionalStopRef.current = false
+      accumulatedTranscriptRef.current = currentTranscript
 
-      recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-        let finalTranscript = ""
-        let interimTranscript = ""
+      try {
+        recognitionRef.current = new SpeechRecognition()
+        recognitionRef.current.continuous = true
+        recognitionRef.current.interimResults = true
+        recognitionRef.current.lang = "en-US"
 
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i]
-          if (result.isFinal) {
-            finalTranscript += result[0].transcript
-          } else {
-            interimTranscript += result[0].transcript
+        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+          let finalTranscript = ""
+          let interimTranscript = ""
+
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i]
+            if (result.isFinal) {
+              finalTranscript += result[0].transcript
+            } else {
+              interimTranscript += result[0].transcript
+            }
+          }
+
+          // Accumulate final results, show interim as preview
+          if (finalTranscript) {
+            accumulatedTranscriptRef.current += finalTranscript
+          }
+          
+          const displayText = accumulatedTranscriptRef.current + interimTranscript
+          onTranscriptChange(displayText)
+        }
+
+        recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+          console.error("Speech recognition error:", event.error)
+          
+          // Don't show error for aborted (intentional stop)
+          if (event.error === "aborted" && intentionalStopRef.current) {
+            return
+          }
+
+          const errorMessage = SPEECH_ERROR_MESSAGES[event.error] || `Speech recognition error: ${event.error}`
+          setSpeechError(errorMessage)
+          
+          // Stop listening on error
+          onStopListening()
+        }
+
+        recognitionRef.current.onend = () => {
+          // If recognition ended unexpectedly (not user-initiated stop),
+          // and we have accumulated text, we could auto-restart or notify
+          if (!intentionalStopRef.current && isListening) {
+            // Recognition ended unexpectedly - this can happen with long pauses
+            // Try to restart if we're still supposed to be listening
+            try {
+              recognitionRef.current?.start()
+            } catch (error) {
+              console.warn("Could not restart speech recognition:", error)
+              onStopListening()
+            }
           }
         }
 
-        const newText = currentTranscript + finalTranscript + interimTranscript
-        onTranscriptChange(newText)
-      }
-
-      recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
-        console.error("Speech recognition error:", event.error)
+        recognitionRef.current.start()
+      } catch (error) {
+        console.error("Failed to start speech recognition:", error)
+        setSpeechError("Failed to start speech recognition. Please try again.")
         onStopListening()
       }
-
-      recognitionRef.current.start()
     } else {
-      recognitionRef.current?.stop()
+      intentionalStopRef.current = true
+      cleanup()
     }
 
-    return () => {
-      recognitionRef.current?.stop()
-    }
-  }, [isListening])
+    return cleanup
+  }, [isListening, onStopListening, onTranscriptChange, currentTranscript])
 
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  const handleMicClick = () => {
+  const handleMicClick = useCallback(() => {
     if (isListening) {
+      intentionalStopRef.current = true
       onStopListening()
       // Submit the transcript when stopping
-      if (currentTranscript.trim()) {
-        onSubmit(currentTranscript)
+      const transcriptToSubmit = accumulatedTranscriptRef.current.trim()
+      if (transcriptToSubmit) {
+        onSubmit(transcriptToSubmit)
         onTranscriptChange("")
+        accumulatedTranscriptRef.current = ""
       }
     } else {
+      // Clear any previous error and accumulated transcript
+      setSpeechError(null)
+      accumulatedTranscriptRef.current = ""
+      onTranscriptChange("")
       onStartListening()
     }
-  }
+  }, [isListening, onStartListening, onStopListening, onSubmit, onTranscriptChange])
 
-  const handleTextSubmit = () => {
+  const handleTextSubmit = useCallback(() => {
     if (textInput.trim() && !disabled) {
       onSubmit(textInput.trim())
       setTextInput("")
     }
-  }
+  }, [textInput, disabled, onSubmit])
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleTextSubmit()
     }
-  }
+  }, [handleTextSubmit])
 
-  const toggleInputMode = () => {
+  const toggleInputMode = useCallback(() => {
     // Stop listening if switching to text mode
     if (!useTextInput && isListening) {
+      intentionalStopRef.current = true
       onStopListening()
     }
+    setSpeechError(null)
     setUseTextInput(!useTextInput)
-  }
+  }, [useTextInput, isListening, onStopListening])
+
+  const dismissError = useCallback(() => {
+    setSpeechError(null)
+  }, [])
 
   return (
     <div className="rounded-xl border border-border bg-card h-full flex flex-col">
@@ -168,6 +251,24 @@ export function ChatPanel({
           </div>
         </div>
       </div>
+
+      {/* Speech Error Banner */}
+      {speechError && (
+        <div className="px-4 py-2 bg-destructive/10 border-b border-destructive/20 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-destructive">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <p className="text-xs">{speechError}</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={dismissError}
+            className="h-6 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
 
       {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
