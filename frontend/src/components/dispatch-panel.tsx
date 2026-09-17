@@ -103,7 +103,7 @@ export function DispatchPanel({
             <p className="text-xs text-muted-foreground">Resource recommendation</p>
           </div>
           {onOverride && (
-            <Button variant="ghost" size="icon" className="w-8 h-8" onClick={onOverride}>
+            <Button variant="ghost" size="icon" className="w-8 h-8" onClick={onOverride} aria-label="Override dispatch recommendation">
               <Settings2 className="w-4 h-4" />
             </Button>
           )}
@@ -168,8 +168,8 @@ export function DispatchPanel({
               <p className="text-xs text-amber-500 uppercase tracking-wider font-medium">Special Units</p>
             </div>
             <ul className="space-y-1">
-              {specialUnits.map((unit, index) => (
-                <li key={index} className="text-sm text-foreground flex items-center gap-2">
+              {specialUnits.map((unit) => (
+                <li key={unit} className="text-sm text-foreground flex items-center gap-2">
                   <span className="text-amber-500">•</span>
                   {unit}
                 </li>

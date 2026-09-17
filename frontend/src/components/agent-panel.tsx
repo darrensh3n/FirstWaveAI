@@ -62,10 +62,13 @@ export function AgentPanel({ incident, onStepsUpdate, onIncidentUpdate, onComple
   const [dispatchResult, setDispatchResult] = useState<DispatchResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const hasStartedRef = useRef(false)
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
 
   useEffect(() => {
     if (hasStartedRef.current) return
     hasStartedRef.current = true
+
+    let cancelled = false
 
     const processDispatch = async () => {
       // Initialize all steps as pending
@@ -79,23 +82,21 @@ export function AgentPanel({ incident, onStepsUpdate, onIncidentUpdate, onComple
       onStepsUpdate(steps)
 
       try {
-        // Simulate agent progression while waiting for backend
-        const progressInterval = setInterval(() => {
-          setCurrentAgentIndex((prev) => {
-            if (prev < AGENTS.length - 1) {
-              // Update step status
-              steps[prev] = { ...steps[prev], status: "complete", timestamp: new Date() }
-              steps[prev + 1] = { ...steps[prev + 1], status: "processing", timestamp: new Date() }
-              onStepsUpdate([...steps])
-              return prev + 1
-            }
-            return prev
-          })
-        }, 800)
-
         // Set first agent to processing
+        let localIndex = 0
         steps[0] = { ...steps[0], status: "processing", timestamp: new Date() }
         onStepsUpdate([...steps])
+
+        // Simulate agent progression while waiting for backend
+        progressIntervalRef.current = setInterval(() => {
+          if (localIndex < AGENTS.length - 1) {
+            steps[localIndex] = { ...steps[localIndex], status: "complete", timestamp: new Date() }
+            localIndex += 1
+            steps[localIndex] = { ...steps[localIndex], status: "processing", timestamp: new Date() }
+            onStepsUpdate([...steps])
+            setCurrentAgentIndex(localIndex)
+          }
+        }, 800)
 
         // Call the backend dispatch endpoint
         const response = await fetch(`${BACKEND_URL}/dispatch`, {
@@ -104,13 +105,16 @@ export function AgentPanel({ incident, onStepsUpdate, onIncidentUpdate, onComple
           body: JSON.stringify({ transcript: incident.description }),
         })
 
-        clearInterval(progressInterval)
+        clearInterval(progressIntervalRef.current)
+
+        if (cancelled) return
 
         if (!response.ok) {
           throw new Error(`Backend error: ${response.status}`)
         }
 
         const result: DispatchResult = await response.json()
+        if (cancelled) return
         setDispatchResult(result)
 
         // Mark all steps complete with their outputs
@@ -168,15 +172,25 @@ export function AgentPanel({ incident, onStepsUpdate, onIncidentUpdate, onComple
 
         onComplete()
       } catch (err) {
+        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
+        if (cancelled) return
         setError(err instanceof Error ? err.message : "Failed to process emergency")
         // Mark current step as error
-        steps[currentAgentIndex] = { ...steps[currentAgentIndex], status: "error" }
-        onStepsUpdate([...steps])
+        const errorIndex = steps.findIndex((s) => s.status === "processing")
+        if (errorIndex !== -1) {
+          steps[errorIndex] = { ...steps[errorIndex], status: "error" }
+          onStepsUpdate([...steps])
+        }
         onComplete()
       }
     }
 
     processDispatch()
+
+    return () => {
+      cancelled = true
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
+    }
   }, [incident.description])
 
   const currentAgent = AGENTS[currentAgentIndex]

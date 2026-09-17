@@ -171,11 +171,9 @@ function EmergencyDashboardContent() {
 
   // Keep ref in sync with state
   const updateDispatch = useCallback((updater: (prev: DispatchRecommendation) => DispatchRecommendation) => {
-    setDispatch((prev) => {
-      const next = updater(prev)
-      dispatchRef.current = next
-      return next
-    })
+    const next = updater(dispatchRef.current)
+    dispatchRef.current = next
+    setDispatch(next)
   }, [])
 
   // Track which agent is currently processing

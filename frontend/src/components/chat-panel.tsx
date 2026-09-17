@@ -432,6 +432,7 @@ export function ChatPanel({
               disabled={disabled || !textInput.trim()}
               size="icon"
               className="flex-shrink-0 h-[44px] w-[44px]"
+              aria-label="Send message"
             >
               <Send className="w-5 h-5" />
             </Button>

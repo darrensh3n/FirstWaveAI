@@ -28,6 +28,7 @@ export function SpeechInput({
   const [showManualInput, setShowManualInput] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(true)
   const recognitionRef = useRef<any | null>(null)
+  const baseTranscriptRef = useRef("")
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -46,6 +47,7 @@ export function SpeechInput({
     if (!SpeechRecognition) return
 
     if (isListening) {
+      baseTranscriptRef.current = transcript
       recognitionRef.current = new SpeechRecognition()
       recognitionRef.current.continuous = true
       recognitionRef.current.interimResults = true
@@ -64,8 +66,10 @@ export function SpeechInput({
           }
         }
 
-        const newText = transcript + finalTranscript + interimTranscript
-        onTranscriptChange(newText)
+        if (finalTranscript) {
+          baseTranscriptRef.current = baseTranscriptRef.current + finalTranscript
+        }
+        onTranscriptChange(baseTranscriptRef.current + interimTranscript)
       }
 
       recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -81,6 +85,7 @@ export function SpeechInput({
     return () => {
       recognitionRef.current?.stop()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isListening])
 
   const handleMicClick = () => {
@@ -125,6 +130,7 @@ export function SpeechInput({
             <button
               onClick={handleMicClick}
               disabled={disabled}
+              aria-label={isListening ? "Stop listening" : "Start listening"}
               className={cn(
                 "relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300",
                 isListening
@@ -171,6 +177,7 @@ export function SpeechInput({
                   variant="ghost"
                   size="icon"
                   onClick={handleClear}
+                  aria-label="Clear transcript"
                   className="text-muted-foreground hover:text-foreground flex-shrink-0"
                 >
                   <X className="w-4 h-4" />

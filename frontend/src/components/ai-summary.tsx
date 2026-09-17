@@ -75,8 +75,8 @@ function ListField({
           </div>
         ) : items.length > 0 ? (
           <ul className="space-y-1">
-            {items.map((item, index) => (
-              <li key={index} className="text-sm text-foreground flex items-start gap-2">
+            {items.map((item) => (
+              <li key={item} className="text-sm text-foreground flex items-start gap-2">
                 <span className="text-muted-foreground">•</span>
                 <span>{item}</span>
               </li>

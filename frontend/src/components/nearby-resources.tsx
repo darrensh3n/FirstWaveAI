@@ -226,7 +226,7 @@ export function NearbyResources() {
             Filter
             <ChevronDown className="w-3 h-3" />
           </Button>
-          <Button variant="ghost" size="icon" className="w-8 h-8">
+          <Button variant="ghost" size="icon" className="w-8 h-8" aria-label="Center map on my location">
             <Navigation className="w-4 h-4" />
           </Button>
         </div>
