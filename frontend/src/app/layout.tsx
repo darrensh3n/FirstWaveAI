@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "FirstWaveAI - AI-Powered Emergency Response",
+  title: "FirstWave",
   description:
     "Professional AI-powered first responder assistance with speech-to-text and intelligent step-by-step guidance",
 }
