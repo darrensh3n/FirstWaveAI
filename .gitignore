@@ -52,3 +52,9 @@ next-env.d.ts
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
+
+# terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars

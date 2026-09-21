@@ -28,7 +28,7 @@ services:
       LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?set LOCALSTACK_AUTH_TOKEN in .env}
       SERVICES: s3
       DEBUG: "0"
-      AWS_DEFAULT_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-west-2
     volumes:
       - localstack-data:/var/lib/localstack
       - /var/run/docker.sock:/var/run/docker.sock
