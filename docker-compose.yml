@@ -26,7 +26,7 @@ services:
       - "4566:4566"
     environment:
       LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?set LOCALSTACK_AUTH_TOKEN in .env}
-      SERVICES: s3
+      SERVICES: s3,dynamodb
       DEBUG: "0"
       AWS_DEFAULT_REGION: us-west-2
     volumes:

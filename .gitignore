@@ -58,3 +58,7 @@ next-env.d.ts
 *.tfstate
 *.tfstate.*
 *.tfvars
+
+# planning docs (local guidance only)
+docs/stages
+PLAN.md
