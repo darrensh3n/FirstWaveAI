@@ -89,7 +89,24 @@ Expect: version output (1.16.3 or later), no error.
 Later upgrades: brew upgrade hashicorp/tap/terraform
 
 2. Add LocalStack to docker-compose.yml
-I'll propose the diff, you review/apply (say when ready — this is a file edit, want your go-ahead before I write it).
+Done. `localstack` service added, plus a top-level `volumes:` block.
+
+2b. LocalStack auth token (required as of 2026)
+LocalStack merged the community and pro images into one as of 2026.3.0. `localstack/localstack:latest`
+now refuses to start without a token — the container exits with code 55 and logs
+"License activation failed! No credentials were found in the environment."
+The free tier is still free, but it needs an account.
+
+Sign up at https://app.localstack.cloud, copy the auth token, and put it in a gitignored root .env:
+
+LOCALSTACK_AUTH_TOKEN=ls-xxxxxxxx
+
+docker-compose.yml reads it via ${LOCALSTACK_AUTH_TOKEN:?...}, so a missing token fails at
+`docker compose config` time with a clear message instead of a mystery exit 55.
+Never commit the token. Root .env is covered by .gitignore line 34.
+
+Alternative if you ever want to avoid the account: pin `localstack/localstack:4.4.0`, the last
+pre-merge community release. Frozen 2025 feature set, and the `lstk` CLI notes below won't apply.
 
 3. Start LocalStack
 docker compose up -d localstack

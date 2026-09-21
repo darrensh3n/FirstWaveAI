@@ -18,3 +18,26 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: firstwave-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?set LOCALSTACK_AUTH_TOKEN in .env}
+      SERVICES: s3
+      DEBUG: "0"
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  localstack-data:
