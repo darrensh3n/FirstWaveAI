@@ -11,7 +11,8 @@ Rationale: app already dockerized (backend FastAPI, frontend Next.js, docker-com
 
 ## Phase 1: Terraform + AWS stack (LocalStack — $0, resume-worthy)
 
-Use [LocalStack](https://localstack.cloud) (free community edition) in Docker. Point Terraform's `aws` provider at it via `endpoint` overrides + dummy credentials — same HCL as real AWS, zero cost, safe to break.
+Use [LocalStack](https://localstack.cloud) (free tier — needs a free account and an
+auth token since the community and pro images merged in 2026.3.0) in Docker. Point Terraform's `aws` provider at it via `endpoint` overrides + dummy credentials — same HCL as real AWS, zero cost, safe to break.
 
 Resume line target: "Terraform, AWS (VPC, ECS/Fargate, S3, IAM, Lambda, DynamoDB), IaC, CI/CD."
 

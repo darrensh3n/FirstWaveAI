@@ -143,11 +143,30 @@ Shows 1 resource to add (the S3 bucket). Nothing created yet — dry run.
 Type yes when prompted. Creates bucket inside LocalStack.
 
 8. Verify bucket exists — two ways
-aws --endpoint-url=http://localhost:4566 s3 ls
+The AWS CLI refuses to sign a request with no credentials at all, even though LocalStack
+ignores the values. So pass dummy creds and a region (same reason provider.tf sets them):
+
+AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+  aws --endpoint-url=http://localhost:4566 --region us-west-2 s3 ls
+
+Without them: "An error occurred (NoCredentials): Unable to locate credentials."
+
+To stop prefixing every command, set up a named profile once (endpoint_url in a profile
+needs AWS CLI v2.13+):
+
+aws configure set aws_access_key_id test --profile localstack
+aws configure set aws_secret_access_key test --profile localstack
+aws configure set region us-west-2 --profile localstack
+aws configure set endpoint_url http://localhost:4566 --profile localstack
+
+then: aws --profile localstack s3 ls
+
 (needs the aws CLI from step 0. The old `awslocal` wrapper is deprecated — as of 2026-09-08 LocalStack replaced the Python localstack CLI and all its wrappers (awslocal, tflocal, samlocal, cdklocal) with a single Go binary, `lstk`. If you install it, the equivalent is `lstk awslocal s3 ls`.)
 or check state:
 terraform show
 Expect: bucket name listed either way.
 
 9. terraform destroy
-Type yes. Confirm bucket gone via same aws s3 ls command — expect empty.
+Type yes. Confirm bucket gone via the same aws s3 ls command from step 8 — expect empty.
+destroy deletes the bucket inside LocalStack and updates terraform.tfstate. It does NOT
+touch provider.tf or main.tf — terraform apply rebuilds the bucket from them any time.
