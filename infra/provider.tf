@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
+    }
   }
 }
 
@@ -19,5 +23,7 @@ provider "aws" {
     s3        = "http://s3.localhost.localstack.cloud:4566"
     s3control = "http://localhost.localstack.cloud:4566"
     dynamodb  = "http://localhost:4566"
+    iam       = "http://localhost:4566"
+    lambda    = "http://localhost:4566"
   }
 }

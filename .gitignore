@@ -58,6 +58,7 @@ next-env.d.ts
 *.tfstate
 *.tfstate.*
 *.tfvars
+**/lambda/handler.zip
 
 # planning docs (local guidance only)
 docs/stages
