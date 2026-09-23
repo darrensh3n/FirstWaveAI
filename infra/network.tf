@@ -54,3 +54,29 @@ resource "aws_route_table_association" "public" {
 # Private subnet intentionally gets no route table association — no outbound
 # internet access. NAT gateway deferred until something in the private
 # subnet actually needs it.
+
+resource "aws_security_group" "app" {
+  name        = "firstwave-app"
+  description = "Backend app traffic (port 8000), scoped to the VPC"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description = "Backend API port, VPC-internal only"
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+  }
+
+  egress {
+    description = "Outbound within the VPC"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+  }
+
+  tags = {
+    Name = "firstwave-app"
+  }
+}
