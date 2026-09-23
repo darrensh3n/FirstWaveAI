@@ -11,10 +11,9 @@ from fastapi.responses import StreamingResponse, JSONResponse, Response
 from pydantic import BaseModel, field_validator
 
 from agents import dispatcher_graph
+from agents.graph import get_ssm_parameter
 
-# Fish Audio TTS configuration
-FISH_AUDIO_API_KEY = os.getenv("FISH_AUDIO_API_KEY")
-FISH_AUDIO_VOICE_ID = os.getenv("FISH_AUDIO_VOICE_ID", "")  # Optional: specific voice
+# Fish Audio TTS configuration (keys/voice ID come from SSM, see agents/graph.py)
 FISH_AUDIO_API_URL = "https://api.fish.audio/v1/tts"
 
 # Configure logging
@@ -159,18 +158,27 @@ async def text_to_speech(request: TTSRequest):
     
     Returns audio bytes (MP3 format) that can be played directly.
     """
-    if not FISH_AUDIO_API_KEY:
+    try:
+        fish_audio_api_key = get_ssm_parameter("/firstwave/backend/FISH_AUDIO_API_KEY")
+    except Exception:
+        fish_audio_api_key = None
+
+    if not fish_audio_api_key:
         logger.error("Fish Audio API key not configured")
         raise APIError(
             status_code=500,
             message="TTS service not configured",
-            details="FISH_AUDIO_API_KEY environment variable is not set"
+            details="FISH_AUDIO_API_KEY not found in SSM at /firstwave/backend/FISH_AUDIO_API_KEY"
         )
-    
+
     logger.info(f"TTS request (text length: {len(request.text)})")
-    
+
     # Use provided voice_id or fall back to configured default
-    voice_id = request.voice_id or FISH_AUDIO_VOICE_ID
+    try:
+        default_voice_id = get_ssm_parameter("/firstwave/backend/FISH_AUDIO_VOICE_ID")
+    except Exception:
+        default_voice_id = ""
+    voice_id = request.voice_id or default_voice_id
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -187,7 +195,7 @@ async def text_to_speech(request: TTSRequest):
             response = await client.post(
                 FISH_AUDIO_API_URL,
                 headers={
-                    "Authorization": f"Bearer {FISH_AUDIO_API_KEY}",
+                    "Authorization": f"Bearer {fish_audio_api_key}",
                     "Content-Type": "application/json",
                 },
                 json=payload,

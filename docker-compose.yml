@@ -8,6 +8,7 @@ services:
       - ./backend/.env
     environment:
       ALLOWED_ORIGINS: http://localhost:3000
+      SSM_ENDPOINT_URL: http://host.docker.internal:4566
 
   frontend:
     build:
