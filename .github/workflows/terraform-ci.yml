@@ -1,0 +1,80 @@
+name: Terraform CI
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+      - 'infra-bootstrap/**'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    services:
+      localstack:
+        image: localstack/localstack
+        ports:
+          - 4566:4566
+        env:
+          SERVICES: s3,dynamodb,iam,lambda,ec2,ssm
+          LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
+
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-west-2
+      TF_VAR_groq_api_key: dummy
+      TF_VAR_fish_audio_api_key: dummy
+      TF_VAR_fish_audio_voice_id: dummy
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: terraform fmt check
+        run: terraform fmt -check -recursive
+
+      - name: terraform validate (infra-bootstrap)
+        working-directory: infra-bootstrap
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: terraform validate (infra)
+        working-directory: infra
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Wait for LocalStack
+        run: |
+          timeout 60 sh -c 'until curl -sf http://localhost:4566/_localstack/health; do sleep 2; done'
+
+      - name: bootstrap state bucket
+        working-directory: infra-bootstrap
+        run: |
+          terraform init
+          terraform apply -auto-approve
+
+      - name: terraform plan (infra)
+        working-directory: infra
+        run: |
+          terraform init -reconfigure
+          set +e
+          terraform plan -detailed-exitcode
+          exit_code=$?
+          set -e
+          if [ $exit_code -eq 1 ]; then
+            exit 1
+          fi
+          exit 0

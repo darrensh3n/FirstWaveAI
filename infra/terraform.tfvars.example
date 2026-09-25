@@ -1,0 +1,3 @@
+groq_api_key         = "your-groq-api-key-here"
+fish_audio_api_key   = "your_api_key_here"
+fish_audio_voice_id  = "optional_voice_id"

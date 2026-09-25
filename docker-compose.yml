@@ -8,6 +8,7 @@ services:
       - ./backend/.env
     environment:
       ALLOWED_ORIGINS: http://localhost:3000
+      SSM_ENDPOINT_URL: http://host.docker.internal:4566
 
   frontend:
     build:
@@ -18,3 +19,26 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: firstwave-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?set LOCALSTACK_AUTH_TOKEN in .env}
+      SERVICES: s3,dynamodb,iam,lambda,logs,ec2,ssm
+      DEBUG: "0"
+      AWS_DEFAULT_REGION: us-west-2
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  localstack-data:

@@ -52,3 +52,14 @@ next-env.d.ts
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
+
+# terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+**/lambda/handler.zip
+
+# planning docs (local guidance only)
+docs/stages
+PLAN.md

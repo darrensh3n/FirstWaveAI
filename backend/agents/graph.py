@@ -9,12 +9,11 @@ import os
 import json
 import logging
 import traceback
-from pathlib import Path
 from typing import Literal, Annotated, Callable, TypeVar
-from functools import wraps
+from functools import wraps, lru_cache
 from typing_extensions import TypedDict
 
-from dotenv import load_dotenv
+import boto3
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_groq import ChatGroq
@@ -24,9 +23,23 @@ from langchain_core.messages import SystemMessage, HumanMessage
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load environment variables from .env file
-env_path = Path(__file__).parent.parent / ".env"
-load_dotenv(env_path)
+# SSM (LocalStack in dev; real AWS SSM in a deployed environment)
+SSM_ENDPOINT_URL = os.getenv("SSM_ENDPOINT_URL", "http://localhost:4566")
+
+_ssm_client = boto3.client(
+    "ssm",
+    region_name="us-west-2",
+    endpoint_url=SSM_ENDPOINT_URL,
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
+)
+
+
+@lru_cache(maxsize=None)
+def get_ssm_parameter(name: str) -> str:
+    """Fetch and cache a config value from SSM Parameter Store."""
+    response = _ssm_client.get_parameter(Name=name, WithDecryption=True)
+    return response["Parameter"]["Value"]
 
 
 # =============================================================================
@@ -123,12 +136,12 @@ def safe_json_parse(content: str, agent_name: str) -> dict | None:
 
 def get_model():
     """Get the Groq model instance."""
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = get_ssm_parameter("/firstwave/backend/GROQ_API_KEY")
     if not api_key:
-        raise ValueError("GROQ_API_KEY not found. Please set it in backend/.env")
-    
+        raise ValueError("GROQ_API_KEY not found in SSM at /firstwave/backend/GROQ_API_KEY")
+
     return ChatGroq(
-        model="llama-3.3-70b-versatile",  # Free tier model
+        model="openai/gpt-oss-120b",  # llama-3.3-70b-versatile was decommissioned by Groq
         temperature=0.1,
         api_key=api_key,
         timeout=30,  # Add timeout to prevent hanging
