@@ -26,6 +26,7 @@ jobs:
           - 4566:4566
         env:
           SERVICES: s3,dynamodb,iam,lambda,ec2,ssm
+          LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
 
     env:
       AWS_ACCESS_KEY_ID: test
