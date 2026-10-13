@@ -30,102 +30,114 @@ FirstWaveAI is a real-time emergency dispatch assistant that combines speech rec
 
 ## 🚀 Key Features
 
-### 🎙️ **Voice-First Interface**
-- Callers can speak naturally using the Web Speech API, while the system transcribes the conversation in real time and maintains a full transcript.
+### 🎙️ Voice-First Interface
+Callers speak naturally using the Web Speech API, while the system transcribes the conversation in real time and keeps a full transcript.
 
-### 🧠 **Multi-Agent AI Pipeline (LangGraph + LLaMA 3.3 70B)**
-Six specialized AI agents work together to analyze the call:
+### 🧠 Multi-Agent AI Pipeline
+Six specialized agents, orchestrated with LangGraph, work together to analyze the call:
 
-- **📝 Extraction Agent** – Captures key details (location, injuries, hazards, people count)
-- **🚦 Triage Agent** – Assigns priority levels (P1–P4)
-- **❓ Next-Question Agent** – Suggests clarifying follow-ups
-- **🚓 Dispatch Planner** – Recommends EMS, Fire, or Police
-- **🗺️ Resource Locator** – Finds nearest available units with ETAs
-- **🛡️ Safety Guardrail** – Ensures ethical recommendations
+- **Extraction Agent** – Captures key details (location, injuries, hazards, people count)
+- **Triage Agent** – Assigns priority levels (P1–P4)
+- **Next-Question Agent** – Suggests clarifying follow-ups
+- **Dispatch Planner** – Recommends EMS, Fire, or Police
+- **Resource Locator** – Finds nearest available units with ETAs
+- **Safety Guardrail** – Ensures ethical recommendations
 
-### 🖥️ **Interactive Dashboard**
-A clean three-column interface shows:
+### 🖥️ Interactive Dashboard
+A three-column interface shows:
 
-- Live chat transcript 💬
-- AI-generated emergency summary 📝
-- Dispatch recommendations with approve/cancel controls ✅❌
+- Live chat transcript
+- AI-generated emergency summary
+- Dispatch recommendations with approve/cancel controls
 
-### 🗺️ **Resource Mapping**
+### 🗺️ Resource Mapping
 An interactive Leaflet map displays nearby hospitals, fire stations, police, and pharmacies with distances and travel times.
 
 ---
 
 ## 🛠️ Tech Stack
 
-### **Backend (AI & Data Processing)**
-- **Python 3.13+** - Core programming language
-- **FastAPI** - Modern, high-performance web framework
-- **LangGraph** - Multi-agent AI workflow orchestration
-- **Groq + LLaMA 3.3 70B** - High-performance LLM inference
-- **Fish Audio API** - Text-to-speech synthesis
-- **Server-Sent Events (SSE)** - Real-time streaming updates
-- **Uvicorn** - ASGI server for production deployment
+### Backend
+- **Python 3.12** with **FastAPI** and **Uvicorn**
+- **LangGraph** – Multi-agent workflow orchestration
+- **Groq** (`openai/gpt-oss-120b`) – LLM inference
+- **Fish Audio API** – Text-to-speech
+- **Server-Sent Events (SSE)** – Real-time streaming updates
+- **boto3** – Reads API keys from AWS SSM Parameter Store
 
-### **Frontend (Visualization & UI)**
-- **Next.js 16** - React framework with App Router
-- **React 19** - Latest React features
-- **TypeScript** - Type-safe development
-- **Tailwind CSS 4** - Utility-first styling with custom emergency theme
-- **shadcn/ui** - High-quality component library
-- **Leaflet + OpenStreetMap** - Interactive mapping
-- **Web Speech API** - Real-time speech recognition and transcription
+### Frontend
+- **Next.js 16** (App Router) with **React 19** and **TypeScript**
+- **Tailwind CSS 4** and **shadcn/ui**
+- **Leaflet + OpenStreetMap** – Interactive mapping
+- **Web Speech API** – Speech recognition and transcription
+
+### Infrastructure
+- **Docker / Docker Compose** – Runs the backend, frontend, and LocalStack together
+- **LocalStack** – Local AWS emulation (S3, DynamoDB, IAM, Lambda, SSM, EC2, CloudWatch Logs)
+- **Terraform** – Infrastructure as code, split into `compute`, `iam`, `networking`, and `storage` modules, with remote state in S3
+- **GitHub Actions** – Terraform format, validate, and plan checks against LocalStack on every PR
 
 ---
 
 ## 🎮 Quick Start
 
 ### Prerequisites
-- **Python 3.13+**
-- **Node.js 18+**
-- **npm/yarn**
-- **Groq API Key** (for LLaMA 3.3 70B - get free at [console.groq.com](https://console.groq.com))
-- **Fish Audio API Key** (for text-to-speech - optional)
+- **Docker** with Docker Compose
+- **Terraform** 1.x
+- **LocalStack auth token** – free account at [app.localstack.cloud](https://app.localstack.cloud)
+- **Groq API key** – free at [console.groq.com](https://console.groq.com)
+- **Fish Audio API key** – optional, for text-to-speech
 
-### 1. Clone the Repository
+### 1. Clone the repository
 ```bash
-git clone https://github.com/your-username/firstwave.git
-cd firstwave
+git clone https://github.com/darrensh3n/FirstWaveAI.git
+cd FirstWaveAI
 ```
 
-### 2. Backend Setup
+### 2. Configure environment files
 ```bash
-cd backend
+# Root .env: LocalStack auth token (gitignored)
+echo "LOCALSTACK_AUTH_TOKEN=your-localstack-token" > .env
 
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# backend/.env is loaded by Docker Compose and must exist
+cp backend/.env.example backend/.env
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up environment variables
-cp .env.example .env
-# Edit .env and add your API keys:
-# - GROQ_API_KEY=your-groq-api-key-here
-# - FISH_AUDIO_API_KEY=your-fish-audio-api-key-here (optional)
-# - FISH_AUDIO_VOICE_ID=optional_voice_id (optional)
-
-# Start the backend server
-python main.py
+# API keys, which Terraform writes into SSM Parameter Store
+cp infra/terraform.tfvars.example infra/terraform.tfvars
+# Edit infra/terraform.tfvars and set groq_api_key (Fish Audio values are optional)
 ```
-Backend will be running at `http://localhost:8000`
 
-### 3. Frontend Setup
+### 3. Start LocalStack
 ```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start the development server
-npm run dev
+docker compose up -d localstack
 ```
-Frontend will be running at `http://localhost:3000`
+
+### 4. Provision infrastructure
+```bash
+# One-time: create the S3 bucket that holds Terraform state
+cd infra-bootstrap
+terraform init
+terraform apply
+
+# Create the app's resources, including the SSM parameters the backend reads
+cd ../infra
+terraform init
+terraform apply
+cd ..
+```
+
+### 5. Start the app
+```bash
+docker compose up -d --build
+```
+
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| Backend | http://localhost:8000 |
+| LocalStack | http://localhost:4566 |
+
+View logs with `docker compose logs -f` and stop everything with `docker compose down`.
 
 ---
 
