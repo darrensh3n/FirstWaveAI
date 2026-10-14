@@ -14,7 +14,7 @@ export function Header() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-foreground tracking-tight">
-                FirstWave<span className="text-primary">AI</span>
+                First<span className="text-emerald-500">Wave</span>
               </h1>
               <p className="text-xs text-muted-foreground">Emergency Response System</p>
             </div>

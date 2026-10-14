@@ -19,6 +19,16 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 // Dynamically import the map to avoid SSR issues with Leaflet
 const MapComponent = dynamic(() => import("./resource-map"), { 
@@ -157,6 +167,17 @@ export function NearbyResources() {
   const [isExpanded, setIsExpanded] = useState(false)
   const [locationEnabled, setLocationEnabled] = useState(true) // Default enabled for demo
   const [isLocating, setIsLocating] = useState(false)
+  const [pendingLink, setPendingLink] = useState<{ kind: "call" | "website"; name: string; target: string } | null>(null)
+
+  const handleConfirmLink = () => {
+    if (!pendingLink) return
+    if (pendingLink.kind === "call") {
+      window.location.href = `tel:${pendingLink.target}`
+    } else {
+      window.open(pendingLink.target, "_blank", "noopener,noreferrer")
+    }
+    setPendingLink(null)
+  }
 
   const handleLocationToggle = (enabled: boolean) => {
     setLocationEnabled(enabled)
@@ -353,22 +374,25 @@ export function NearbyResources() {
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 {resource.phone && (
-                  <Button variant="ghost" size="icon" className="w-9 h-9" asChild>
-                    <a href={`tel:${resource.phone}`} aria-label={`Call ${resource.name}`}>
-                      <Phone className="w-4 h-4" />
-                    </a>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-9 h-9"
+                    aria-label={`Call ${resource.name}`}
+                    onClick={() => setPendingLink({ kind: "call", name: resource.name, target: resource.phone! })}
+                  >
+                    <Phone className="w-4 h-4" />
                   </Button>
                 )}
                 {resource.website && (
-                  <Button variant="ghost" size="icon" className="w-9 h-9" asChild>
-                    <a 
-                      href={resource.website} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      aria-label={`Visit ${resource.name} website`}
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-9 h-9"
+                    aria-label={`Visit ${resource.name} website`}
+                    onClick={() => setPendingLink({ kind: "website", name: resource.name, target: resource.website! })}
+                  >
+                    <ExternalLink className="w-4 h-4" />
                   </Button>
                 )}
               </div>
@@ -376,6 +400,25 @@ export function NearbyResources() {
           )
         })}
       </div>
+
+      <AlertDialog open={pendingLink !== null} onOpenChange={(open) => !open && setPendingLink(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingLink?.kind === "call" ? `Call ${pendingLink.name}?` : `Open ${pendingLink?.name} website?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingLink?.kind === "call"
+                ? `This will start a call to ${pendingLink.target}.`
+                : `This will open ${pendingLink?.target} in a new tab.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmLink}>Continue</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
