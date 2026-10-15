@@ -63,3 +63,4 @@ next-env.d.ts
 # planning docs (local guidance only)
 docs/stages
 PLAN.md
+scalability-review.md

@@ -29,6 +29,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 // Dynamically import the map to avoid SSR issues with Leaflet
 const MapComponent = dynamic(() => import("./resource-map"), { 
@@ -127,24 +136,28 @@ const mockResources: Resource[] = [
 
 const resourceTypeConfig = {
   medical: { 
+    label: "Medical",
     icon: Cross, 
     color: "text-rose-500", 
     bg: "bg-rose-500/20",
     activeBg: "bg-rose-500/30"
   },
   police: { 
+    label: "Police",
     icon: Shield, 
     color: "text-sky-500", 
     bg: "bg-sky-500/20",
     activeBg: "bg-sky-500/30"
   },
   fire: { 
+    label: "Fire",
     icon: Flame, 
     color: "text-orange-500", 
     bg: "bg-orange-500/20",
     activeBg: "bg-orange-500/30"
   },
   pharmacy: { 
+    label: "Pharmacy",
     icon: Building2, 
     color: "text-emerald-500", 
     bg: "bg-emerald-500/20",
@@ -163,7 +176,8 @@ export function NearbyResources() {
   // For demo: Start with SJSU location already set
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(DEMO_CALLER_LOCATION)
   const [locationError, setLocationError] = useState<string | null>(null)
-  const [selectedFilter, setSelectedFilter] = useState<ResourceType | null>(null)
+  // Empty set = show all types
+  const [selectedTypes, setSelectedTypes] = useState<Set<ResourceType>>(new Set())
   const [isExpanded, setIsExpanded] = useState(false)
   const [locationEnabled, setLocationEnabled] = useState(true) // Default enabled for demo
   const [isLocating, setIsLocating] = useState(false)
@@ -217,8 +231,17 @@ export function NearbyResources() {
     }
   }
 
-  const filteredResources = selectedFilter 
-    ? mockResources.filter(r => r.type === selectedFilter)
+  const toggleType = (type: ResourceType) => {
+    setSelectedTypes(prev => {
+      const next = new Set(prev)
+      if (next.has(type)) next.delete(type)
+      else next.add(type)
+      return next
+    })
+  }
+
+  const filteredResources = selectedTypes.size > 0
+    ? mockResources.filter(r => selectedTypes.has(r.type))
     : mockResources
 
   const resourceCounts = {
@@ -242,11 +265,47 @@ export function NearbyResources() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2">
-            <Filter className="w-4 h-4" />
-            Filter
-            <ChevronDown className="w-3 h-3" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="w-4 h-4" />
+                Filter
+                {selectedTypes.size > 0 && (
+                  <span className="text-xs px-1.5 rounded-full bg-secondary text-foreground">
+                    {selectedTypes.size}
+                  </span>
+                )}
+                <ChevronDown className="w-3 h-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>Resource types</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {(Object.keys(resourceTypeConfig) as ResourceType[]).map((type) => {
+                const config = resourceTypeConfig[type]
+                const Icon = config.icon
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={type}
+                    checked={selectedTypes.has(type)}
+                    onCheckedChange={() => toggleType(type)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    <Icon className={`w-4 h-4 ${config.color}`} />
+                    <span className="flex-1">{config.label}</span>
+                    <span className="text-xs text-muted-foreground">{resourceCounts[type]}</span>
+                  </DropdownMenuCheckboxItem>
+                )
+              })}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={selectedTypes.size === 0}
+                onSelect={() => setSelectedTypes(new Set())}
+              >
+                Show all
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="ghost" size="icon" className="w-8 h-8" aria-label="Center map on my location">
             <Navigation className="w-4 h-4" />
           </Button>
@@ -300,11 +359,13 @@ export function NearbyResources() {
           {(Object.keys(resourceCounts) as ResourceType[]).map((type) => {
             const config = resourceTypeConfig[type]
             const Icon = config.icon
-            const isActive = selectedFilter === type
+            const isActive = selectedTypes.has(type)
             return (
               <button
                 key={type}
-                onClick={() => setSelectedFilter(isActive ? null : type)}
+                aria-label={`Filter ${config.label}`}
+                aria-pressed={isActive}
+                onClick={() => toggleType(type)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200
                   ${isActive 
                     ? `${config.activeBg} ${config.color} ring-1 ring-current` 
