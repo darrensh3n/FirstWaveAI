@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
-import { Mic, MicOff, Send, User, Bot, Keyboard, MessageSquare, AlertCircle, Volume2, VolumeX } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
-import { cn } from "@/lib/utils"
+import {useEffect, useRef, useState, useCallback} from "react"
+import {Mic, MicOff, Send, User, Bot, Keyboard, MessageSquare, AlertCircle, Volume2, VolumeX} from "lucide-react"
+import {Button} from "@/components/ui/button"
+import {Textarea} from "@/components/ui/textarea"
+import {Switch} from "@/components/ui/switch"
+import {cn} from "@/lib/utils"
 
 export type ChatMessage = {
   id: string
@@ -59,7 +59,7 @@ export function ChatPanel({
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  
+
   // Use ref to track accumulated transcript to avoid stale closure issues
   const accumulatedTranscriptRef = useRef("")
   // Track if we're intentionally stopping (vs natural end)
@@ -78,7 +78,7 @@ export function ChatPanel({
   // Store callbacks in refs to avoid stale closures and unnecessary effect re-runs
   const onTranscriptChangeRef = useRef(onTranscriptChange)
   const onStopListeningRef = useRef(onStopListening)
-  
+
   useEffect(() => {
     onTranscriptChangeRef.current = onTranscriptChange
     onStopListeningRef.current = onStopListening
@@ -124,7 +124,7 @@ export function ChatPanel({
         recognition.onresult = (event: SpeechRecognitionEvent) => {
           // Check if we're still supposed to be listening
           if (intentionalStopRef.current) return
-          
+
           let finalTranscript = ""
           let interimTranscript = ""
 
@@ -141,14 +141,14 @@ export function ChatPanel({
           if (finalTranscript) {
             accumulatedTranscriptRef.current += finalTranscript
           }
-          
+
           const displayText = accumulatedTranscriptRef.current + interimTranscript
           onTranscriptChangeRef.current(displayText)
         }
 
         recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
           console.error("Speech recognition error:", event.error)
-          
+
           // Don't show error for aborted (intentional stop)
           if (event.error === "aborted" && intentionalStopRef.current) {
             return
@@ -156,7 +156,7 @@ export function ChatPanel({
 
           const errorMessage = SPEECH_ERROR_MESSAGES[event.error] || `Speech recognition error: ${event.error}`
           setSpeechError(errorMessage)
-          
+
           // Stop listening on error
           onStopListeningRef.current()
         }
@@ -190,17 +190,17 @@ export function ChatPanel({
 
   // Scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    messagesEndRef.current?.scrollIntoView({behavior: "smooth"})
   }, [messages])
 
   const handleMicClick = useCallback(() => {
     if (isListening) {
       // Set flag FIRST to prevent any more processing in callbacks
       intentionalStopRef.current = true
-      
+
       // Capture the transcript before stopping
       const transcriptToSubmit = accumulatedTranscriptRef.current.trim()
-      
+
       // Stop recognition manually to ensure clean shutdown
       if (recognitionRef.current) {
         recognitionRef.current.onresult = null
@@ -213,15 +213,15 @@ export function ChatPanel({
         }
         recognitionRef.current = null
       }
-      
+
       // Now update state
       onStopListening()
-      
+
       // Submit the transcript if we have content
       if (transcriptToSubmit) {
         onSubmit(transcriptToSubmit)
       }
-      
+
       // Clear the transcript display and ref
       onTranscriptChange("")
       accumulatedTranscriptRef.current = ""
@@ -252,7 +252,7 @@ export function ChatPanel({
     // Stop listening if switching to text mode
     if (!useTextInput && isListening) {
       intentionalStopRef.current = true
-      
+
       // Clean shutdown of recognition
       if (recognitionRef.current) {
         recognitionRef.current.onresult = null
@@ -265,7 +265,7 @@ export function ChatPanel({
         }
         recognitionRef.current = null
       }
-      
+
       onStopListening()
       onTranscriptChange("")
       accumulatedTranscriptRef.current = ""
@@ -284,7 +284,7 @@ export function ChatPanel({
       <div className="px-4 py-3 border-b border-border flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-foreground text-sm">Caller ↔ AI Chat</h3>
+            <h3 className="font-semibold text-foreground text-sm">Caller ↔ AI Dispatcher</h3>
             <p className="text-xs text-muted-foreground">
               {useTextInput ? "Text input mode" : "Voice input mode"}
             </p>

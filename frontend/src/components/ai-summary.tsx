@@ -1,6 +1,6 @@
 "use client"
 
-import { MapPin, AlertTriangle, Gauge, FileText, HelpCircle, Loader2 } from "lucide-react"
+import {MapPin, AlertTriangle, Gauge, FileText, HelpCircle, Loader2} from "lucide-react"
 
 export type SummaryData = {
   location: string | null
@@ -15,12 +15,12 @@ interface AISummaryProps {
   data: SummaryData
 }
 
-function SummaryField({ 
-  icon: Icon, 
-  label, 
-  value, 
-  isLoading 
-}: { 
+function SummaryField({
+  icon: Icon,
+  label,
+  value,
+  isLoading
+}: {
   icon: React.ElementType
   label: string
   value: string | null
@@ -48,13 +48,13 @@ function SummaryField({
   )
 }
 
-function ListField({ 
-  icon: Icon, 
-  label, 
-  items, 
+function ListField({
+  icon: Icon,
+  label,
+  items,
   emptyText,
-  isLoading 
-}: { 
+  isLoading
+}: {
   icon: React.ElementType
   label: string
   items: string[]
@@ -90,54 +90,54 @@ function ListField({
   )
 }
 
-export function AISummary({ data }: AISummaryProps) {
-  const { location, incident, priority, keyFacts, missingInfo, isProcessing } = data
+export function AISummary({data}: AISummaryProps) {
+  const {location, incident, priority, keyFacts, missingInfo, isProcessing} = data
 
   return (
     <div className="rounded-xl border border-border bg-card h-full flex flex-col">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border flex-shrink-0">
-        <h3 className="font-semibold text-foreground text-sm">AI Summary</h3>
-        <p className="text-xs text-muted-foreground">Real-time incident analysis</p>
+        <h3 className="font-semibold text-foreground text-sm">Incident Summary</h3>
+        <p className="text-xs text-muted-foreground">Analysis</p>
       </div>
 
       {/* Summary Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-5">
-        <SummaryField 
-          icon={MapPin} 
-          label="Location" 
-          value={location} 
+        <SummaryField
+          icon={MapPin}
+          label="Location"
+          value={location}
           isLoading={isProcessing && !location}
         />
-        
-        <SummaryField 
-          icon={AlertTriangle} 
-          label="Incident" 
+
+        <SummaryField
+          icon={AlertTriangle}
+          label="Incident"
           value={incident}
           isLoading={isProcessing && !incident}
         />
-        
-        <SummaryField 
-          icon={Gauge} 
-          label="Priority" 
+
+        <SummaryField
+          icon={Gauge}
+          label="Priority"
           value={priority}
           isLoading={isProcessing && !priority}
         />
-        
+
         <div className="border-t border-border pt-4">
-          <ListField 
-            icon={FileText} 
-            label="Key Facts" 
+          <ListField
+            icon={FileText}
+            label="Key Facts"
             items={keyFacts}
             emptyText="No facts extracted yet"
             isLoading={isProcessing && keyFacts.length === 0}
           />
         </div>
-        
+
         <div className="border-t border-border pt-4">
-          <ListField 
-            icon={HelpCircle} 
-            label="Missing Info" 
+          <ListField
+            icon={HelpCircle}
+            label="Missing Info"
             items={missingInfo}
             emptyText="All information collected"
             isLoading={isProcessing && missingInfo.length === 0}
