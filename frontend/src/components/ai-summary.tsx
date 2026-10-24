@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { Loader2 } from "lucide-react"
 import { Card, CardAction, CardContent, CardHeader, CardTitle, CardTile } from "@/components/ui/card"
 
@@ -40,6 +41,31 @@ function SummaryTile({ label, value, isLoading }: { label: string; value: string
   )
 }
 
+function SummarySection({
+  title,
+  items,
+  isProcessing,
+  emptyText,
+  children,
+}: {
+  title: string
+  items: string[]
+  isProcessing: boolean
+  emptyText: string
+  children: ReactNode
+}) {
+  let body = children
+  if (isProcessing && items.length === 0) body = <Analyzing />
+  else if (items.length === 0) body = <p className="text-sm text-muted-foreground">{emptyText}</p>
+
+  return (
+    <section className="space-y-2">
+      <h4 className="field-label font-sans">{title}</h4>
+      {body}
+    </section>
+  )
+}
+
 export function AISummary({ data }: AISummaryProps) {
   const { location, incident, keyFacts, missingInfo, isProcessing } = data
   const hasData = Boolean(location || incident || keyFacts.length || missingInfo.length)
@@ -62,45 +88,39 @@ export function AISummary({ data }: AISummaryProps) {
           <SummaryTile label="Incident" value={incident} isLoading={isProcessing && !incident} />
         </div>
 
-        <section className="space-y-2">
-          <h4 className="field-label font-sans">Key facts</h4>
-          {isProcessing && keyFacts.length === 0 ? (
-            <Analyzing />
-          ) : keyFacts.length > 0 ? (
-            <ul className="space-y-1.5">
-              {keyFacts.map((item) => (
-                <li key={item} className="flex items-start gap-2.5 text-sm text-foreground">
-                  <span className="mt-[0.55em] size-1 shrink-0 rounded-full bg-primary" aria-hidden />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {hasData ? "No key facts yet" : "Waiting for the caller…"}
-            </p>
-          )}
-        </section>
+        <SummarySection
+          title="Key facts"
+          items={keyFacts}
+          isProcessing={isProcessing}
+          emptyText={hasData ? "No key facts yet" : "Waiting for the caller…"}
+        >
+          <ul className="space-y-1.5">
+            {keyFacts.map((item) => (
+              <li key={item} className="flex items-start gap-2.5 text-sm text-foreground">
+                <span className="mt-[0.55em] size-1 shrink-0 rounded-full bg-primary" aria-hidden />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </SummarySection>
 
-        <section className="space-y-2">
-          <h4 className="field-label font-sans">Still missing</h4>
-          {isProcessing && missingInfo.length === 0 ? (
-            <Analyzing />
-          ) : missingInfo.length > 0 ? (
-            <ul className="flex flex-wrap gap-1.5">
-              {missingInfo.map((item) => (
-                <li
-                  key={item}
-                  className="rounded-full border border-warning/50 px-3 py-1 text-[13px] text-warning"
-                >
-                  {item}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">{hasData ? "All information collected" : "—"}</p>
-          )}
-        </section>
+        <SummarySection
+          title="Still missing"
+          items={missingInfo}
+          isProcessing={isProcessing}
+          emptyText={hasData ? "All information collected" : "—"}
+        >
+          <ul className="flex flex-wrap gap-1.5">
+            {missingInfo.map((item) => (
+              <li
+                key={item}
+                className="rounded-full border border-warning/50 px-3 py-1 text-[13px] text-warning"
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
+        </SummarySection>
       </CardContent>
     </Card>
   )
