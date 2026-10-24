@@ -289,7 +289,7 @@ export function NearbyResources({ priority = null }: NearbyResourcesProps) {
         </CardAction>
       </CardHeader>
 
-      <div className="grid flex-1 md:grid-cols-2">
+      <div className="grid flex-1 md:grid-cols-[3fr_2fr]">
         {/* Map + legend */}
         <div className="flex flex-col border-b border-border md:border-r md:border-b-0">
           <div

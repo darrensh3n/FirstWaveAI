@@ -724,10 +724,12 @@ function EmergencyDashboardContent() {
       </div>
 
       {/* Row 2: nearby resources + agent pipeline */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ErrorBoundary onReset={handleReset}>
-          <NearbyResources priority={dispatch.priority} />
-        </ErrorBoundary>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-2">
+          <ErrorBoundary onReset={handleReset}>
+            <NearbyResources priority={dispatch.priority} />
+          </ErrorBoundary>
+        </div>
         <ErrorBoundary onReset={handleReset}>
           <AgentPipeline
             currentAgent={currentAgent}
