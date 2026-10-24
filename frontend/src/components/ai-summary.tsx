@@ -1,6 +1,7 @@
 "use client"
 
-import {MapPin, AlertTriangle, Gauge, FileText, HelpCircle, Loader2} from "lucide-react"
+import { Loader2 } from "lucide-react"
+import { Card, CardAction, CardContent, CardHeader, CardTitle, CardTile } from "@/components/ui/card"
 
 export type SummaryData = {
   location: string | null
@@ -15,135 +16,92 @@ interface AISummaryProps {
   data: SummaryData
 }
 
-function SummaryField({
-  icon: Icon,
-  label,
-  value,
-  isLoading
-}: {
-  icon: React.ElementType
-  label: string
-  value: string | null
-  isLoading?: boolean
-}) {
+function Analyzing() {
   return (
-    <div className="flex items-start gap-3">
-      <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
-        <Icon className="w-4 h-4 text-muted-foreground" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">{label}</p>
-        {isLoading ? (
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-3 h-3 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">Analyzing...</span>
-          </div>
-        ) : value ? (
-          <p className="text-sm text-foreground font-medium">{value}</p>
-        ) : (
-          <p className="text-sm text-amber-500">?</p>
-        )}
-      </div>
-    </div>
+    <span className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Loader2 className="size-3 animate-spin text-primary" aria-hidden />
+      Analyzing…
+    </span>
   )
 }
 
-function ListField({
-  icon: Icon,
-  label,
-  items,
-  emptyText,
-  isLoading
-}: {
-  icon: React.ElementType
-  label: string
-  items: string[]
-  emptyText: string
-  isLoading?: boolean
-}) {
+function SummaryTile({ label, value, isLoading }: { label: string; value: string | null; isLoading?: boolean }) {
   return (
-    <div className="flex items-start gap-3">
-      <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
-        <Icon className="w-4 h-4 text-muted-foreground" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
-        {isLoading ? (
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-3 h-3 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">Analyzing...</span>
-          </div>
-        ) : items.length > 0 ? (
-          <ul className="space-y-1">
-            {items.map((item) => (
-              <li key={item} className="text-sm text-foreground flex items-start gap-2">
-                <span className="text-muted-foreground">•</span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">{emptyText}</p>
-        )}
-      </div>
-    </div>
+    <CardTile className="min-w-0 px-3.5 py-3">
+      <p className="field-label mb-1">{label}</p>
+      {isLoading ? (
+        <Analyzing />
+      ) : value ? (
+        <p className="text-sm font-semibold text-foreground">{value}</p>
+      ) : (
+        <p className="text-sm text-muted-foreground">Unknown</p>
+      )}
+    </CardTile>
   )
 }
 
-export function AISummary({data}: AISummaryProps) {
-  const {location, incident, priority, keyFacts, missingInfo, isProcessing} = data
+export function AISummary({ data }: AISummaryProps) {
+  const { location, incident, keyFacts, missingInfo, isProcessing } = data
+  const hasData = Boolean(location || incident || keyFacts.length || missingInfo.length)
 
   return (
-    <div className="rounded-xl border border-border bg-card h-full flex flex-col">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex-shrink-0">
-        <h3 className="font-semibold text-foreground text-sm">Incident Summary</h3>
-        <p className="text-xs text-muted-foreground">Analysis</p>
-      </div>
+    <Card className="h-full">
+      <CardHeader>
+        <CardTitle>AI summary</CardTitle>
+        {isProcessing && (
+          <CardAction>
+            <Loader2 className="size-3.5 animate-spin text-primary" aria-hidden />
+            Updating
+          </CardAction>
+        )}
+      </CardHeader>
 
-      {/* Summary Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
-        <SummaryField
-          icon={MapPin}
-          label="Location"
-          value={location}
-          isLoading={isProcessing && !location}
-        />
-
-        <SummaryField
-          icon={AlertTriangle}
-          label="Incident"
-          value={incident}
-          isLoading={isProcessing && !incident}
-        />
-
-        <SummaryField
-          icon={Gauge}
-          label="Priority"
-          value={priority}
-          isLoading={isProcessing && !priority}
-        />
-
-        <div className="border-t border-border pt-4">
-          <ListField
-            icon={FileText}
-            label="Key Facts"
-            items={keyFacts}
-            emptyText="No facts extracted yet"
-            isLoading={isProcessing && keyFacts.length === 0}
-          />
+      <CardContent className="min-h-0 space-y-5 overflow-y-auto">
+        <div className="grid grid-cols-2 gap-2.5">
+          <SummaryTile label="Location" value={location} isLoading={isProcessing && !location} />
+          <SummaryTile label="Incident" value={incident} isLoading={isProcessing && !incident} />
         </div>
 
-        <div className="border-t border-border pt-4">
-          <ListField
-            icon={HelpCircle}
-            label="Missing Info"
-            items={missingInfo}
-            emptyText="All information collected"
-            isLoading={isProcessing && missingInfo.length === 0}
-          />
-        </div>
-      </div>
-    </div>
+        <section className="space-y-2">
+          <h4 className="field-label font-sans">Key facts</h4>
+          {isProcessing && keyFacts.length === 0 ? (
+            <Analyzing />
+          ) : keyFacts.length > 0 ? (
+            <ul className="space-y-1.5">
+              {keyFacts.map((item) => (
+                <li key={item} className="flex items-start gap-2.5 text-sm text-foreground">
+                  <span className="mt-[0.55em] size-1 shrink-0 rounded-full bg-primary" aria-hidden />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {hasData ? "No key facts yet" : "Waiting for the caller…"}
+            </p>
+          )}
+        </section>
+
+        <section className="space-y-2">
+          <h4 className="field-label font-sans">Still missing</h4>
+          {isProcessing && missingInfo.length === 0 ? (
+            <Analyzing />
+          ) : missingInfo.length > 0 ? (
+            <ul className="flex flex-wrap gap-1.5">
+              {missingInfo.map((item) => (
+                <li
+                  key={item}
+                  className="rounded-full border border-warning/50 px-3 py-1 text-[13px] text-warning"
+                >
+                  {item}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">{hasData ? "All information collected" : "—"}</p>
+          )}
+        </section>
+      </CardContent>
+    </Card>
   )
 }

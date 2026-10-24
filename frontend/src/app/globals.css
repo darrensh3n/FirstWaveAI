@@ -259,3 +259,113 @@
 .leaflet-control-attribution a {
   color: var(--muted-foreground) !important;
 }
+
+/* ==========================================================================
+   Console map: Leaflet overrides (design.md §5)
+   Added by the console restyle. Markers, incident rings, zoom control and
+   popup content. Uses existing tokens only.
+   ========================================================================== */
+/* Dark basemap: invert the standard OSM tiles so the map doesn't glare. */
+.fw-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.35);
+}
+
+.fw-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.fw-marker__dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  border: 2px solid var(--card);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.5);
+}
+
+.fw-incident {
+  position: relative;
+  display: block;
+  width: 44px;
+  height: 44px;
+}
+
+.fw-incident__ring,
+.fw-incident__dot {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border-radius: 9999px;
+}
+
+.fw-incident__ring {
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid color-mix(in srgb, var(--fw-incident) 70%, transparent);
+}
+
+.fw-incident__ring--outer {
+  width: 44px;
+  height: 44px;
+  border-color: color-mix(in srgb, var(--fw-incident) 40%, transparent);
+  transform-origin: center;
+}
+
+/* The shared wave-ring keyframes scale to 2.4x, too big for a map pin.
+   Keeps the .animate-wave-ring class so the reduce-motion rules above apply. */
+.fw-incident__ring--outer.animate-wave-ring {
+  animation-name: fw-incident-ring;
+}
+
+@keyframes fw-incident-ring {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.7);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+.fw-incident__dot {
+  width: 14px;
+  height: 14px;
+  background: var(--fw-incident);
+  border: 2px solid var(--card);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--fw-incident) 60%, transparent);
+}
+
+.leaflet-container .leaflet-bar {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.leaflet-container .leaflet-bar a {
+  width: 30px;
+  height: 30px;
+  line-height: 30px;
+}
+
+.leaflet-container .leaflet-bar a:hover {
+  background: var(--card-raised) !important;
+}
+
+.leaflet-container .leaflet-bar a.leaflet-disabled {
+  color: var(--subtle-foreground) !important;
+}
+
+.leaflet-popup-content {
+  margin: 10px 14px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.leaflet-control-attribution {
+  font-size: 10px;
+}
