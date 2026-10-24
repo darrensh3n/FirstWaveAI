@@ -1,10 +1,10 @@
 "use client"
 
 import {useEffect, useRef, useState, useCallback} from "react"
-import {Mic, MicOff, Send, User, Bot, Keyboard, MessageSquare, AlertCircle, Volume2, VolumeX} from "lucide-react"
+import {Mic, MicOff, ArrowRight, AlertCircle, Volume2, VolumeX} from "lucide-react"
 import {Button} from "@/components/ui/button"
-import {Textarea} from "@/components/ui/textarea"
-import {Switch} from "@/components/ui/switch"
+import {Card, CardAction, CardHeader, CardTitle} from "@/components/ui/card"
+import {Input} from "@/components/ui/input"
 import {cn} from "@/lib/utils"
 
 export type ChatMessage = {
@@ -53,12 +53,10 @@ export function ChatPanel({
   isSpeaking = false,
 }: ChatPanelProps) {
   const [speechSupported, setSpeechSupported] = useState(true)
-  const [useTextInput, setUseTextInput] = useState(false)
   const [textInput, setTextInput] = useState("")
   const [speechError, setSpeechError] = useState<string | null>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const logRef = useRef<HTMLDivElement>(null)
 
   // Use ref to track accumulated transcript to avoid stale closure issues
   const accumulatedTranscriptRef = useRef("")
@@ -190,7 +188,9 @@ export function ChatPanel({
 
   // Scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({behavior: "smooth"})
+    // Scroll the transcript itself (scrollIntoView would also scroll the page)
+    const log = logRef.current
+    if (log) log.scrollTo({top: log.scrollHeight, behavior: "smooth"})
   }, [messages])
 
   const handleMicClick = useCallback(() => {
@@ -248,105 +248,61 @@ export function ChatPanel({
     }
   }, [handleTextSubmit])
 
-  const toggleInputMode = useCallback(() => {
-    // Stop listening if switching to text mode
-    if (!useTextInput && isListening) {
-      intentionalStopRef.current = true
-
-      // Clean shutdown of recognition
-      if (recognitionRef.current) {
-        recognitionRef.current.onresult = null
-        recognitionRef.current.onerror = null
-        recognitionRef.current.onend = null
-        try {
-          recognitionRef.current.stop()
-        } catch {
-          // Ignore errors
-        }
-        recognitionRef.current = null
-      }
-
-      onStopListening()
-      onTranscriptChange("")
-      accumulatedTranscriptRef.current = ""
-    }
-    setSpeechError(null)
-    setUseTextInput(!useTextInput)
-  }, [useTextInput, isListening, onStopListening, onTranscriptChange])
-
   const dismissError = useCallback(() => {
     setSpeechError(null)
   }, [])
 
+  const isEmpty = messages.length === 0 && !currentTranscript
+
   return (
-    <div className="rounded-xl border border-border bg-card h-full flex flex-col">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-foreground text-sm">Caller ↔ AI Dispatcher</h3>
-            <p className="text-xs text-muted-foreground">
-              {useTextInput ? "Text input mode" : "Voice input mode"}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* TTS Toggle */}
-            {onTtsToggle && (
-              <div className="flex items-center gap-1.5">
-                {ttsEnabled ? (
-                  <Volume2 className="w-3.5 h-3.5 text-primary" />
-                ) : (
-                  <VolumeX className="w-3.5 h-3.5 text-muted-foreground" />
-                )}
-                <Switch
-                  checked={ttsEnabled}
-                  onCheckedChange={onTtsToggle}
-                  className="scale-75"
-                />
-              </div>
-            )}
-            {/* Status indicators */}
-            {isSpeaking && (
-              <div className="flex items-center gap-1.5">
-                <Volume2 className="w-3.5 h-3.5 text-primary animate-pulse" />
-                <span className="text-xs text-primary font-medium">Speaking</span>
-              </div>
-            )}
-            {isListening && (
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                <span className="text-xs text-rose-500 font-medium">Recording</span>
-              </div>
-            )}
+    <Card className="h-full">
+      <CardHeader>
+        <CardTitle>Live transcript</CardTitle>
+        <CardAction className="gap-3">
+          {isSpeaking && (
+            <span className="flex items-center gap-1.5 text-primary">
+              <Volume2 className="size-3.5" aria-hidden />
+              Speaking
+            </span>
+          )}
+          {isListening && (
+            <span className="flex items-center gap-2" role="status">
+              <span className="size-2 rounded-full bg-danger animate-pulse-dot" aria-hidden />
+              Listening
+            </span>
+          )}
+          {/* Spoken replies toggle. Lives here until Settings → Voice is wired up. */}
+          {onTtsToggle && (
             <Button
               variant="ghost"
-              size="sm"
-              onClick={toggleInputMode}
-              className="text-muted-foreground hover:text-foreground"
-              title={useTextInput ? "Switch to voice" : "Switch to text"}
+              size="icon-sm"
+              onClick={() => onTtsToggle(!ttsEnabled)}
+              aria-pressed={ttsEnabled}
+              aria-label={ttsEnabled ? "Turn off spoken replies" : "Turn on spoken replies"}
+              title={ttsEnabled ? "Spoken replies on" : "Spoken replies off"}
+              className={cn(ttsEnabled && "text-primary hover:text-primary")}
             >
-              {useTextInput ? (
-                <MessageSquare className="w-4 h-4" />
-              ) : (
-                <Keyboard className="w-4 h-4" />
-              )}
+              {ttsEnabled ? <Volume2 /> : <VolumeX />}
             </Button>
-          </div>
-        </div>
-      </div>
+          )}
+        </CardAction>
+      </CardHeader>
 
       {/* Speech Error Banner */}
       {speechError && (
-        <div className="px-4 py-2 bg-destructive/10 border-b border-destructive/20 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-destructive">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-2 border-b border-danger/25 bg-danger/10 px-5 py-2"
+        >
+          <div className="flex items-center gap-2 text-danger">
+            <AlertCircle className="size-4 shrink-0" aria-hidden />
             <p className="text-xs">{speechError}</p>
           </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={dismissError}
-            className="h-6 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+            className="h-6 px-2 text-danger hover:text-danger"
           >
             Dismiss
           </Button>
@@ -354,124 +310,93 @@ export function ChatPanel({
       )}
 
       {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
-        {messages.length === 0 && !currentTranscript && (
-          <div className="h-full flex flex-col items-center justify-center text-center py-8">
-            <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-3">
-              <Mic className="w-6 h-6 text-muted-foreground/50" />
-            </div>
-            <p className="text-sm text-muted-foreground">Chat bubbles appear here</p>
-            <p className="text-xs text-muted-foreground/70 mt-1">Click start to begin recording</p>
+      <div
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5"
+        ref={logRef}
+        role="log"
+        aria-live="polite"
+        aria-label="Call transcript"
+      >
+        {isEmpty && (
+          <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+            <p className="text-sm text-muted-foreground">Waiting for the caller…</p>
+            <p className="mt-1 text-xs text-muted-foreground">Type the caller&apos;s words or press the mic to listen.</p>
           </div>
         )}
 
         {messages.map((message) => (
           <div
             key={message.id}
-            className={cn(
-              "flex gap-2",
-              message.role === "caller" ? "justify-end" : "justify-start"
-            )}
+            className={cn("flex", message.role === "caller" ? "justify-start" : "justify-end")}
           >
-            {message.role === "ai" && (
-              <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                <Bot className="w-4 h-4 text-primary" />
-              </div>
-            )}
             <div
               className={cn(
-                "max-w-[80%] rounded-xl px-3 py-2 text-sm",
+                "max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed",
                 message.role === "caller"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-foreground"
+                  ? "bg-card-raised text-foreground"
+                  : "border border-primary/35 bg-primary-soft text-foreground"
               )}
             >
+              <span className="sr-only">{message.role === "caller" ? "Caller: " : "FirstWave: "}</span>
               {message.content}
             </div>
-            {message.role === "caller" && (
-              <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                <User className="w-4 h-4 text-muted-foreground" />
-              </div>
-            )}
           </div>
         ))}
 
         {/* Current transcript being recorded */}
         {currentTranscript && (
-          <div className="flex gap-2 justify-end">
-            <div className="max-w-[80%] rounded-xl px-3 py-2 text-sm bg-primary/70 text-primary-foreground animate-pulse">
+          <div className="flex justify-start" aria-live="off">
+            <div className="max-w-[85%] rounded-xl border border-dashed border-border-strong bg-card-raised/60 px-3.5 py-2.5 text-sm leading-relaxed text-muted-foreground">
+              <span className="sr-only">Caller (live): </span>
               {currentTranscript}
-              <span className="inline-block w-1.5 h-4 bg-primary-foreground/70 ml-1 animate-pulse" />
-            </div>
-            <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-              <User className="w-4 h-4 text-muted-foreground" />
+              <span className="ml-1 inline-block h-4 w-1 translate-y-0.5 bg-muted-foreground/70 animate-pulse" aria-hidden />
             </div>
           </div>
         )}
 
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-border flex-shrink-0">
-        {useTextInput ? (
-          /* Text Input Mode */
-          <div className="flex gap-2">
-            <Textarea
-              ref={textareaRef}
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your message here... (Enter to send)"
-              disabled={disabled}
-              className="min-h-[44px] max-h-[120px] resize-none bg-secondary/50"
-              rows={1}
-            />
-            <Button
-              onClick={handleTextSubmit}
-              disabled={disabled || !textInput.trim()}
-              size="icon"
-              className="flex-shrink-0 h-[44px] w-[44px]"
-              aria-label="Send message"
-            >
-              <Send className="w-5 h-5" />
-            </Button>
-          </div>
-        ) : (
-          /* Voice Input Mode */
-          <>
-            <div className="flex items-center justify-center">
-              <Button
-                onClick={handleMicClick}
-                disabled={disabled || !speechSupported}
-                size="lg"
-                variant={isListening ? "destructive" : "default"}
-                className={cn(
-                  "gap-2 px-6 transition-all",
-                  isListening && "animate-pulse"
-                )}
-              >
-                {isListening ? (
-                  <>
-                    <MicOff className="w-5 h-5" />
-                    Stop Listening
-                  </>
-                ) : (
-                  <>
-                    <Mic className="w-5 h-5" />
-                    Start Listening
-                  </>
-                )}
-              </Button>
-            </div>
-            {!speechSupported && (
-              <p className="text-xs text-center text-muted-foreground mt-2">
-                Speech recognition not supported in this browser
-              </p>
+      <div className="shrink-0 border-t border-border p-4">
+        <div className="flex items-center gap-2">
+          <Input
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type or speak the caller's reply"
+            disabled={disabled}
+            aria-label="Caller's reply"
+          />
+          <Button
+            onClick={handleMicClick}
+            disabled={disabled || !speechSupported}
+            variant="outline"
+            size="icon"
+            aria-pressed={isListening}
+            aria-label={isListening ? "Stop listening and send" : "Start listening"}
+            title={speechSupported ? undefined : "Speech recognition not supported in this browser"}
+            className={cn(
+              "shrink-0",
+              isListening && "border-danger/50 bg-danger/15 text-danger hover:bg-danger/20"
             )}
-          </>
+          >
+            {isListening ? <MicOff /> : <Mic />}
+          </Button>
+          <Button
+            onClick={handleTextSubmit}
+            disabled={disabled || !textInput.trim()}
+            size="icon"
+            className="shrink-0"
+            aria-label="Send message"
+          >
+            <ArrowRight />
+          </Button>
+        </div>
+        {!speechSupported && (
+          <p className="mt-2 text-xs text-muted-foreground">Speech recognition isn&apos;t supported in this browser.</p>
         )}
       </div>
-    </div>
+    </Card>
   )
 }
+

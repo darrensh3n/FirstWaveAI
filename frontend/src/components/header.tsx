@@ -29,25 +29,25 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card shadow-elevated">
-      <div className="flex h-[76px] items-center justify-between px-6">
-        <Link href="/" className="flex items-center gap-3 rounded-tile" aria-label="FirstWave home">
-          <Radio className="size-8 text-primary" strokeWidth={2.25} aria-hidden />
-          <div>
-            <p className="font-display text-xl font-bold leading-tight tracking-tight text-foreground">FirstWave</p>
-            <p className="text-xs text-muted-foreground">Emergency Response System</p>
+      <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6">
+        <Link href="/" className="flex min-w-0 items-center gap-3 rounded-tile" aria-label="FirstWave home">
+          <Radio className="size-7 shrink-0 text-primary" strokeWidth={2.25} aria-hidden />
+          <div className="min-w-0">
+            <p className="font-display text-lg font-bold leading-tight tracking-tight text-foreground">FirstWave</p>
+            <p className="truncate text-xs leading-tight text-muted-foreground">Emergency Response System</p>
           </div>
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           <div
             role="status"
-            className="flex h-10 items-center gap-2 rounded-full bg-card-raised px-4 text-sm font-semibold"
+            className="flex h-10 items-center gap-2 rounded-full bg-card-raised px-4 text-[13px] font-semibold"
           >
             <span
               className={cn("size-2 rounded-full animate-pulse-dot", online ? "bg-success" : "bg-danger")}
               aria-hidden
             />
-            <span className="text-foreground">
+            <span className="text-muted-foreground">
               System:{" "}
               <span className={online ? "text-success" : "text-danger"}>{online ? "Online" : "Offline"}</span>
             </span>

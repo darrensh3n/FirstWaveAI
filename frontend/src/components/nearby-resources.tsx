@@ -1,24 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import dynamic from "next/dynamic"
-import { 
-  MapPin, 
-  Phone, 
-  ExternalLink, 
-  Flame, 
-  Building2, 
-  Shield, 
-  Cross,
-  Filter,
-  Navigation,
-  ChevronDown,
-  Car,
-  MapPinOff,
-  Loader2
-} from "lucide-react"
+import { Phone, ExternalLink, MoreHorizontal, Maximize2, Minimize2, Loader2, MapPinOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
+import { Card, CardAction, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,17 +24,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 
 // Dynamically import the map to avoid SSR issues with Leaflet
-const MapComponent = dynamic(() => import("./resource-map"), { 
+const MapComponent = dynamic(() => import("./resource-map"), {
   ssr: false,
   loading: () => (
-    <div className="h-48 bg-secondary/50 rounded-lg flex flex-col items-center justify-center gap-2">
-      <MapPin className="w-8 h-8 text-muted-foreground/50" />
-      <span className="text-muted-foreground text-sm">Map Component Area</span>
-      <span className="text-muted-foreground/70 text-xs">Loading map...</span>
+    <div className="flex h-full items-center justify-center bg-input">
+      <span className="font-mono text-xs text-muted-foreground">Loading map…</span>
     </div>
-  )
+  ),
 })
 
 type ResourceType = "medical" | "police" | "fire" | "pharmacy"
@@ -134,36 +119,14 @@ const mockResources: Resource[] = [
   },
 ]
 
-const resourceTypeConfig = {
-  medical: { 
-    label: "Medical",
-    icon: Cross, 
-    color: "text-rose-500", 
-    bg: "bg-rose-500/20",
-    activeBg: "bg-rose-500/30"
-  },
-  police: { 
-    label: "Police",
-    icon: Shield, 
-    color: "text-sky-500", 
-    bg: "bg-sky-500/20",
-    activeBg: "bg-sky-500/30"
-  },
-  fire: { 
-    label: "Fire",
-    icon: Flame, 
-    color: "text-orange-500", 
-    bg: "bg-orange-500/20",
-    activeBg: "bg-orange-500/30"
-  },
-  pharmacy: { 
-    label: "Pharmacy",
-    icon: Building2, 
-    color: "text-emerald-500", 
-    bg: "bg-emerald-500/20",
-    activeBg: "bg-emerald-500/30"
-  },
+// Resource type colors + labels (design.md §2.1). Order matches the legend.
+const resourceTypeConfig: Record<ResourceType, { label: string; dot: string }> = {
+  medical: { label: "Hospital", dot: "bg-resource-medical" },
+  fire: { label: "Fire", dot: "bg-resource-fire" },
+  police: { label: "Police", dot: "bg-resource-police" },
+  pharmacy: { label: "Pharmacy", dot: "bg-resource-pharmacy" },
 }
+const RESOURCE_TYPES = Object.keys(resourceTypeConfig) as ResourceType[]
 
 // Demo mode: Hardcoded caller location at San Jose State University
 const DEMO_CALLER_LOCATION = {
@@ -172,7 +135,12 @@ const DEMO_CALLER_LOCATION = {
   name: "San Jose State University"
 }
 
-export function NearbyResources() {
+interface NearbyResourcesProps {
+  /** Current call priority (P1–P4); tints the incident pin on the map. */
+  priority?: string | null
+}
+
+export function NearbyResources({ priority = null }: NearbyResourcesProps) {
   // For demo: Start with SJSU location already set
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(DEMO_CALLER_LOCATION)
   const [locationError, setLocationError] = useState<string | null>(null)
@@ -195,12 +163,12 @@ export function NearbyResources() {
 
   const handleLocationToggle = (enabled: boolean) => {
     setLocationEnabled(enabled)
-    
+
     if (enabled) {
       if ("geolocation" in navigator) {
         setIsLocating(true)
         setLocationError(null)
-        
+
         navigator.geolocation.getCurrentPosition(
           (position) => {
             setUserLocation({
@@ -212,8 +180,8 @@ export function NearbyResources() {
           },
           (error) => {
             setLocationError(
-              error.code === 1 
-                ? "Location permission denied" 
+              error.code === 1
+                ? "Location permission denied"
                 : "Unable to retrieve your location"
             )
             setIsLocating(false)
@@ -240,50 +208,54 @@ export function NearbyResources() {
     })
   }
 
-  const filteredResources = selectedTypes.size > 0
-    ? mockResources.filter(r => selectedTypes.has(r.type))
-    : mockResources
+  const isTypeVisible = (type: ResourceType) => selectedTypes.size === 0 || selectedTypes.has(type)
 
-  const resourceCounts = {
-    medical: mockResources.filter(r => r.type === "medical").length,
-    police: mockResources.filter(r => r.type === "police").length,
-    fire: mockResources.filter(r => r.type === "fire").length,
-    pharmacy: mockResources.filter(r => r.type === "pharmacy").length,
-  }
+  const filteredResources = mockResources
+    .filter((r) => isTypeVisible(r.type))
+    .sort((a, b) => a.distance - b.distance)
+
+  const resourceCounts = Object.fromEntries(
+    RESOURCE_TYPES.map((type) => [type, mockResources.filter((r) => r.type === type).length])
+  ) as Record<ResourceType, number>
+
+  const locationStatus = isLocating
+    ? { text: "Detecting location…", tone: "text-muted-foreground" }
+    : locationEnabled && userLocation
+      ? { text: `Caller location: ${DEMO_CALLER_LOCATION.name}`, tone: "text-muted-foreground" }
+      : locationError
+        ? { text: locationError, tone: "text-warning" }
+        : { text: "Location sharing off", tone: "text-muted-foreground" }
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      {/* Header */}
-      <div className="p-4 flex items-center justify-between border-b border-border">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-            <MapPin className="w-5 h-5 text-emerald-500" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-foreground">Nearby Resources</h3>
-            <p className="text-sm text-muted-foreground">Emergency services in your area</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+    <Card className="h-full overflow-hidden">
+      <CardHeader>
+        <CardTitle>Nearby resources</CardTitle>
+        <CardAction className="gap-1">
+          {selectedTypes.size > 0 && (
+            <span className="font-mono text-xs text-muted-foreground">
+              {selectedTypes.size} filter{selectedTypes.size > 1 ? "s" : ""}
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setIsExpanded(!isExpanded)}
+            aria-label={isExpanded ? "Collapse map" : "Expand map"}
+            aria-pressed={isExpanded}
+          >
+            {isExpanded ? <Minimize2 /> : <Maximize2 />}
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Filter className="w-4 h-4" />
-                Filter
-                {selectedTypes.size > 0 && (
-                  <span className="text-xs px-1.5 rounded-full bg-secondary text-foreground">
-                    {selectedTypes.size}
-                  </span>
-                )}
-                <ChevronDown className="w-3 h-3" />
+              <Button variant="ghost" size="icon-sm" aria-label="Map options">
+                <MoreHorizontal />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Resource types</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {(Object.keys(resourceTypeConfig) as ResourceType[]).map((type) => {
+              {RESOURCE_TYPES.map((type) => {
                 const config = resourceTypeConfig[type]
-                const Icon = config.icon
                 return (
                   <DropdownMenuCheckboxItem
                     key={type}
@@ -291,175 +263,151 @@ export function NearbyResources() {
                     onCheckedChange={() => toggleType(type)}
                     onSelect={(e) => e.preventDefault()}
                   >
-                    <Icon className={`w-4 h-4 ${config.color}`} />
+                    <span className={cn("size-2 rounded-full", config.dot)} aria-hidden />
                     <span className="flex-1">{config.label}</span>
-                    <span className="text-xs text-muted-foreground">{resourceCounts[type]}</span>
+                    <span className="font-mono text-xs text-muted-foreground">{resourceCounts[type]}</span>
                   </DropdownMenuCheckboxItem>
                 )
               })}
-              <DropdownMenuSeparator />
               <DropdownMenuItem
                 disabled={selectedTypes.size === 0}
                 onSelect={() => setSelectedTypes(new Set())}
               >
                 Show all
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={locationEnabled}
+                disabled={isLocating}
+                onCheckedChange={(checked) => handleLocationToggle(checked === true)}
+                onSelect={(e) => e.preventDefault()}
+              >
+                Share caller location
+              </DropdownMenuCheckboxItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon" className="w-8 h-8" aria-label="Center map on my location">
-            <Navigation className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
+        </CardAction>
+      </CardHeader>
 
-      <div className="p-4 space-y-4">
-        {/* Location Toggle */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {isLocating ? (
-              <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" />
-            ) : locationEnabled && userLocation ? (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            ) : locationError ? (
-              <MapPinOff className="w-4 h-4 text-amber-500" />
-            ) : (
-              <span className="w-2 h-2 rounded-full bg-muted-foreground/50" />
+      <div className="grid flex-1 md:grid-cols-2">
+        {/* Map + legend */}
+        <div className="flex flex-col border-b border-border md:border-r md:border-b-0">
+          <div
+            className={cn(
+              // isolate: keep Leaflet's z-index 400+ panes under the sticky header and menus
+              "relative isolate transition-[height] duration-300 motion-reduce:transition-none",
+              isExpanded ? "h-[480px]" : "h-[280px]"
             )}
-            <span className={`text-sm ${
-              isLocating 
-                ? 'text-emerald-500' 
-                : locationEnabled && userLocation 
-                  ? 'text-emerald-500' 
-                  : locationError 
-                    ? 'text-amber-500' 
-                    : 'text-muted-foreground'
-            }`}>
-              {isLocating 
-                ? 'Detecting location...' 
-                : locationEnabled && userLocation 
-                  ? `Caller location: ${DEMO_CALLER_LOCATION.name}` 
-                  : locationError 
-                    ? locationError 
-                    : 'Share your location for nearby results'}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Share location</span>
-            <Switch
-              checked={locationEnabled}
-              onCheckedChange={handleLocationToggle}
-              disabled={isLocating}
-              aria-label="Toggle location sharing"
+          >
+            <MapComponent
+              resources={filteredResources}
+              userLocation={userLocation}
+              priority={priority}
+              className="h-full"
             />
           </div>
-        </div>
-
-        {/* Filter Badges */}
-        <div className="flex gap-2 flex-wrap">
-          {(Object.keys(resourceCounts) as ResourceType[]).map((type) => {
-            const config = resourceTypeConfig[type]
-            const Icon = config.icon
-            const isActive = selectedTypes.has(type)
-            return (
-              <button
-                key={type}
-                aria-label={`Filter ${config.label}`}
-                aria-pressed={isActive}
-                onClick={() => toggleType(type)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200
-                  ${isActive 
-                    ? `${config.activeBg} ${config.color} ring-1 ring-current` 
-                    : 'bg-secondary text-muted-foreground hover:bg-secondary/80'
-                  }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {resourceCounts[type]}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Map */}
-        <div className="relative">
-          <MapComponent 
-            resources={filteredResources} 
-            userLocation={userLocation}
-            className={`transition-all duration-300 ${isExpanded ? "h-96" : "h-48"}`}
-          />
-          <Button 
-            variant="secondary" 
-            size="sm" 
-            className="absolute bottom-3 right-3 shadow-lg"
-            onClick={() => setIsExpanded(!isExpanded)}
+          <div
+            className="flex flex-wrap items-center gap-1 border-t border-border px-3 py-2"
+            role="group"
+            aria-label="Filter resource types on map"
           >
-            {isExpanded ? 'Collapse' : 'Expand'}
-          </Button>
+            {RESOURCE_TYPES.map((type) => {
+              const config = resourceTypeConfig[type]
+              const active = selectedTypes.has(type)
+              const visible = isTypeVisible(type)
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleType(type)}
+                  className={cn(
+                    "flex h-7 items-center gap-1.5 rounded-lg border px-2 text-xs font-medium transition-colors",
+                    active
+                      ? "border-primary/50 bg-primary-soft text-foreground"
+                      : "border-transparent hover:bg-card-raised",
+                    visible ? "text-foreground" : "text-muted-foreground"
+                  )}
+                >
+                  <span className={cn("size-2 rounded-full", config.dot, !visible && "opacity-40")} aria-hidden />
+                  {config.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </div>
 
-      {/* Resource List */}
-      <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
-        {filteredResources.map((resource) => {
-          const config = resourceTypeConfig[resource.type]
-          const Icon = config.icon
-          return (
-            <div 
-              key={resource.id} 
-              className="p-4 flex items-center justify-between hover:bg-secondary/30 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg ${config.bg} flex items-center justify-center flex-shrink-0`}>
-                  <Icon className={`w-5 h-5 ${config.color}`} />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-foreground">{resource.name}</span>
-                    {resource.is24Hours && (
-                      <span className="text-xs px-1.5 py-0.5 rounded border border-emerald-500/50 text-emerald-500 font-medium">
-                        24h
-                      </span>
+        {/* Resource list */}
+        <div className="flex min-w-0 flex-col px-4 py-3">
+          <ul className="divide-y divide-border">
+            {filteredResources.map((resource) => {
+              const config = resourceTypeConfig[resource.type]
+              return (
+                <li key={resource.id} className="group relative flex min-h-12 items-center gap-3 py-2">
+                  <span className={cn("size-2 shrink-0 rounded-full", config.dot)} aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-foreground" title={resource.name}>
+                      {resource.name}
+                      <span className="sr-only"> ({config.label})</span>
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">{resource.address}</p>
+                  </div>
+                  {/* Actions overlay the distance on hover/focus; always inline on touch screens. */}
+                  {(resource.phone || resource.website) && (
+                  <div
+                    className={cn(
+                      "absolute inset-y-0 right-0 flex items-center gap-0.5 bg-card pl-2 opacity-0 transition-opacity",
+                      "group-hover:opacity-100 focus-within:opacity-100",
+                      "[@media(hover:none)]:static [@media(hover:none)]:order-last [@media(hover:none)]:opacity-100"
+                    )}
+                  >
+                    {resource.phone && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Call ${resource.name}`}
+                        onClick={() => setPendingLink({ kind: "call", name: resource.name, target: resource.phone! })}
+                      >
+                        <Phone />
+                      </Button>
+                    )}
+                    {resource.website && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Visit ${resource.name} website`}
+                        onClick={() => setPendingLink({ kind: "website", name: resource.name, target: resource.website! })}
+                      >
+                        <ExternalLink />
+                      </Button>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground truncate">{resource.address}</p>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                    <span className="flex items-center gap-1">
-                      <Navigation className="w-3 h-3" />
-                      {resource.distance} mi
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Car className="w-3 h-3" />
-                      {resource.travelTime} min
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                {resource.phone && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-9 h-9"
-                    aria-label={`Call ${resource.name}`}
-                    onClick={() => setPendingLink({ kind: "call", name: resource.name, target: resource.phone! })}
-                  >
-                    <Phone className="w-4 h-4" />
-                  </Button>
-                )}
-                {resource.website && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-9 h-9"
-                    aria-label={`Visit ${resource.name} website`}
-                    onClick={() => setPendingLink({ kind: "website", name: resource.name, target: resource.website! })}
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          )
-        })}
+                  )}
+                  <span className="shrink-0 whitespace-nowrap font-mono text-xs text-muted-foreground">
+                    {resource.distance} mi · {resource.travelTime} min
+                  </span>
+                </li>
+              )
+            })}
+            {filteredResources.length === 0 && (
+              <li className="py-6 text-center text-sm text-muted-foreground">No resources match these filters</li>
+            )}
+          </ul>
+
+          <p className={cn("mt-auto flex items-center gap-2 pt-3 text-xs", locationStatus.tone)}>
+            {isLocating ? (
+              <Loader2 className="size-3 animate-spin" aria-hidden />
+            ) : locationError ? (
+              <MapPinOff className="size-3" aria-hidden />
+            ) : (
+              <span
+                className={cn("size-1.5 rounded-full", locationEnabled && userLocation ? "bg-success" : "bg-subtle-foreground")}
+                aria-hidden
+              />
+            )}
+            {locationStatus.text}
+          </p>
+        </div>
       </div>
 
       <AlertDialog open={pendingLink !== null} onOpenChange={(open) => !open && setPendingLink(null)}>
@@ -480,6 +428,6 @@ export function NearbyResources() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </Card>
   )
 }
