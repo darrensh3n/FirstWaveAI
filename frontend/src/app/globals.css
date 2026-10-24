@@ -1,155 +1,371 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:is(.dark *));
+/* FirstWave is dark only (see design.md §1). `dark:` utilities stay usable but
+   always apply, so shadcn components that ship with them keep working. */
+@custom-variant dark (&:where(:root, :root *));
 
 @theme inline {
+  /* Surfaces & text */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --color-emerald-400: oklch(0.765 0.177 163.223);
-  --color-emerald-500: oklch(0.696 0.17 162.48);
-  --color-emerald-600: oklch(0.596 0.145 163.225);
-  --color-emerald-900: oklch(0.359 0.078 165.612);
-  --color-emerald-950: oklch(0.262 0.051 166.109);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-card-raised: var(--card-raised);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-input: var(--input);
   --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
+  --color-border-strong: var(--border-strong);
   --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-ring: var(--ring);
+
+  /* Accent */
   --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  /* Status */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-destructive: var(--destructive);
+
+  /* Priority scale (P1–P4) */
+  --color-p1: var(--p1);
+  --color-p2: var(--p2);
+  --color-p3: var(--p3);
+  --color-p4: var(--p4);
+
+  /* Resource types */
+  --color-resource-medical: var(--resource-medical);
+  --color-resource-fire: var(--resource-fire);
+  --color-resource-police: var(--resource-police);
+  --color-resource-pharmacy: var(--resource-pharmacy);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Type */
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Radius: inputs/tiles 10px, cards 14px, buttons/chips pill */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
+  --radius-tile: 0.625rem;
+  --radius-card: 0.875rem;
+
+  --shadow-elevated: 0 20px 60px rgb(0 0 0 / 0.45);
+
+  --animate-pulse-dot: pulse-dot 1.6s ease-in-out infinite;
+  --animate-wave-ring: wave-ring 2.4s ease-out infinite;
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  color-scheme: dark;
+
+  --radius: 0.625rem; /* 10px */
+
+  --background: #070b12;
+  --foreground: #e8ecf4;
+  --card: #0c1220;
+  --card-foreground: var(--foreground);
+  --card-raised: #111a2b;
+  --popover: var(--card-raised);
+  --popover-foreground: var(--foreground);
+  --input: #060a11;
+  --border: #1a2335;
+  --border-strong: #26324a;
+  --muted: var(--card-raised);
+  --muted-foreground: #8b95a8;
+  --subtle-foreground: #5f6b80;
+
+  --primary: #38d4f2;
+  --primary-foreground: #06121a;
+  --primary-soft: color-mix(in srgb, var(--primary) 12%, transparent);
+  --ring: var(--primary);
+  --secondary: var(--card-raised);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--card-raised);
+  --accent-foreground: var(--foreground);
+
+  --success: #5ee6c8;
+  --warning: #f5a94a;
+  --danger: #f2708a;
+  --destructive: var(--danger);
+
+  --p1: #f2708a;
+  --p2: #f5a94a;
+  --p3: #a7a9ff;
+  --p4: #8b95a8;
+
+  --resource-medical: #38d4f2;
+  --resource-fire: #ff7a45;
+  --resource-police: #a7a9ff;
+  --resource-pharmacy: #8b95a8;
+
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--warning);
+  --chart-4: var(--p3);
+  --chart-5: var(--danger);
 }
 
-.dark {
-  --background: oklch(0.12 0.01 240);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.16 0.01 240);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.16 0.01 240);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.696 0.17 162.48);
-  --primary-foreground: oklch(0.12 0.01 240);
-  --secondary: oklch(0.22 0.01 240);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.22 0.01 240);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.696 0.17 162.48);
-  --accent-foreground: oklch(0.12 0.01 240);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.696 0.17 162.48);
-  --chart-1: oklch(0.696 0.17 162.48);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.16 0.01 240);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.696 0.17 162.48);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.22 0.01 240);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.696 0.17 162.48);
+/* Accent options (Settings → Appearance). Only the primary changes. */
+:root[data-accent="indigo"] {
+  --primary: #8b8cf8;
+}
+:root[data-accent="amber"] {
+  --primary: #f5a94a;
+}
+:root[data-accent="mint"] {
+  --primary: #5ee6c8;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display text-foreground;
+    font-weight: 700;
+  }
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--primary-soft);
+    color: var(--foreground);
   }
 }
 
-/* Leaflet custom marker styles */
+@layer components {
+  /* 11px mono uppercase, primary color. "AI EMERGENCY DISPATCH ASSISTANT" */
+  .eyebrow {
+    @apply font-mono text-primary uppercase;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+  }
+  /* 11px sans uppercase, muted. "LOCATION", "RATIONALE" */
+  .field-label {
+    @apply text-muted-foreground uppercase;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes wave-ring {
+  0% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+
+/* Decorative motion (pulsing dots, wave rings) stops under the OS setting or
+   Settings → "Reduce motion" (data-reduce-motion on <html>). Spinners keep going. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-dot,
+  .animate-wave-ring,
+  .animate-ping,
+  .animate-pulse {
+    animation: none !important;
+  }
+}
+:root[data-reduce-motion] :is(.animate-pulse-dot, .animate-wave-ring, .animate-ping, .animate-pulse) {
+  animation: none !important;
+}
+
+/* Leaflet */
 .custom-marker,
 .user-marker {
   background: transparent !important;
   border: none !important;
 }
 
+.leaflet-container {
+  font-family: inherit;
+  background: var(--input);
+}
+
 .leaflet-popup-content-wrapper {
-  background: var(--card);
+  background: var(--card-raised);
   color: var(--foreground);
-  border-radius: 0.5rem;
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.45);
 }
 
 .leaflet-popup-tip {
-  background: var(--card);
+  background: var(--card-raised);
 }
 
 .leaflet-popup-close-button {
   color: var(--muted-foreground) !important;
 }
 
-.leaflet-container {
-  font-family: inherit;
+.leaflet-bar a {
+  background: var(--card) !important;
+  color: var(--foreground) !important;
+  border-color: var(--border) !important;
+}
+
+.leaflet-control-attribution {
+  background: color-mix(in srgb, var(--card) 85%, transparent) !important;
+  color: var(--subtle-foreground) !important;
+}
+
+.leaflet-control-attribution a {
+  color: var(--muted-foreground) !important;
+}
+
+/* ==========================================================================
+   Console map: Leaflet overrides (design.md §5)
+   Added by the console restyle. Markers, incident rings, zoom control and
+   popup content. Uses existing tokens only.
+   ========================================================================== */
+/* Dark basemap: invert the standard OSM tiles so the map doesn't glare. */
+.fw-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.35);
+}
+
+.fw-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.fw-marker__dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  border: 2px solid var(--card);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.5);
+}
+
+.fw-incident {
+  position: relative;
+  display: block;
+  width: 44px;
+  height: 44px;
+}
+
+.fw-incident__ring,
+.fw-incident__dot {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border-radius: 9999px;
+}
+
+.fw-incident__ring {
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid color-mix(in srgb, var(--fw-incident) 70%, transparent);
+}
+
+.fw-incident__ring--outer {
+  width: 44px;
+  height: 44px;
+  border-color: color-mix(in srgb, var(--fw-incident) 40%, transparent);
+  transform-origin: center;
+}
+
+/* The shared wave-ring keyframes scale to 2.4x, too big for a map pin.
+   Keeps the .animate-wave-ring class so the reduce-motion rules above apply. */
+.fw-incident__ring--outer.animate-wave-ring {
+  animation-name: fw-incident-ring;
+}
+
+@keyframes fw-incident-ring {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.7);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+.fw-incident__dot {
+  width: 14px;
+  height: 14px;
+  background: var(--fw-incident);
+  border: 2px solid var(--card);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--fw-incident) 60%, transparent);
+}
+
+.leaflet-container .leaflet-bar {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.leaflet-container .leaflet-bar a {
+  width: 30px;
+  height: 30px;
+  line-height: 30px;
+}
+
+.leaflet-container .leaflet-bar a:hover {
+  background: var(--card-raised) !important;
+}
+
+.leaflet-container .leaflet-bar a.leaflet-disabled {
+  color: var(--subtle-foreground) !important;
+}
+
+.leaflet-popup-content {
+  margin: 10px 14px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.leaflet-control-attribution {
+  font-size: 10px;
 }

@@ -1,10 +1,13 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
+import { Plus } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { ChatPanel, type ChatMessage } from "./chat-panel"
 import { AISummary, type SummaryData } from "./ai-summary"
 import { DispatchPanel, type DispatchRecommendation } from "./dispatch-panel"
 import { NearbyResources } from "./nearby-resources"
+import { AgentPipeline } from "./agent-pipeline"
 import { ErrorBoundary } from "./error-boundary"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
@@ -657,12 +660,33 @@ function EmergencyDashboardContent() {
     dispatchRef.current = initialDispatch
   }
 
+  const callStartedAt = messages[0]?.timestamp ?? null
+
   return (
-    <div className="container mx-auto px-4 py-6 space-y-6">
-      {/* Main 3-Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-[500px]">
-        {/* LEFT: Caller ↔ AI Chat + Mic */}
-        <div className="lg:col-span-1">
+    <div className="space-y-4 px-4 py-6 sm:px-6 lg:py-8">
+      {/* Title row */}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-2">
+        <h1 className="text-[28px] leading-tight tracking-[-0.01em]">Active call</h1>
+        <div className="flex items-center gap-4">
+          <p className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground" aria-live="off">
+            {callStartedAt ? (
+              <>
+                {summaryData.incident || "Incoming call"} · <CallTimer startedAt={callStartedAt} /> elapsed
+              </>
+            ) : (
+              "No active call"
+            )}
+          </p>
+          <Button onClick={handleReset} disabled={messages.length === 0}>
+            <Plus aria-hidden />
+            New call
+          </Button>
+        </div>
+      </div>
+
+      {/* Row 1: transcript, summary, dispatch. Below lg: transcript, dispatch, summary. */}
+      <div className="grid grid-cols-1 gap-4 lg:h-[560px] lg:grid-cols-3">
+        <div className="order-1 h-[520px] min-h-0 lg:h-auto">
           <ErrorBoundary onReset={handleReset}>
             <ChatPanel
               isListening={isListening}
@@ -680,21 +704,18 @@ function EmergencyDashboardContent() {
           </ErrorBoundary>
         </div>
 
-        {/* CENTER: AI Summary */}
-        <div className="lg:col-span-1">
+        <div className="order-3 min-h-0 lg:order-2">
           <ErrorBoundary onReset={handleReset}>
             <AISummary data={summaryData} />
           </ErrorBoundary>
         </div>
 
-        {/* RIGHT: Dispatch (Pending) + Override */}
-        <div className="lg:col-span-1">
+        <div className="order-2 min-h-0 lg:order-3">
           <ErrorBoundary onReset={handleReset}>
             <DispatchPanel
               recommendation={dispatch}
               onApprove={handleApprove}
               onCancel={handleCancel}
-              onOverride={handleReset}
               isProcessing={isProcessing}
               hasStartedConversation={messages.length > 0}
             />
@@ -702,11 +723,41 @@ function EmergencyDashboardContent() {
         </div>
       </div>
 
-      {/* Nearby Resources Section */}
-      <ErrorBoundary onReset={handleReset}>
-        <NearbyResources />
-      </ErrorBoundary>
+      {/* Row 2: nearby resources + agent pipeline */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-2">
+          <ErrorBoundary onReset={handleReset}>
+            <NearbyResources priority={dispatch.priority} />
+          </ErrorBoundary>
+        </div>
+        <ErrorBoundary onReset={handleReset}>
+          <AgentPipeline
+            currentAgent={currentAgent}
+            isProcessing={isProcessing}
+            hasCompletedRun={messages.length > 0 && dispatch.priority !== null}
+          />
+        </ErrorBoundary>
+      </div>
     </div>
+  )
+}
+
+/** Live mm:ss since the first message of the call. */
+function CallTimer({ startedAt }: { startedAt: Date }) {
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const seconds = Math.max(0, Math.floor((now - startedAt.getTime()) / 1000))
+  const mm = String(Math.floor(seconds / 60)).padStart(2, "0")
+  const ss = String(seconds % 60).padStart(2, "0")
+  return (
+    <time dateTime={`PT${seconds}S`} className="tabular-nums">
+      {mm}:{ss}
+    </time>
   )
 }
 

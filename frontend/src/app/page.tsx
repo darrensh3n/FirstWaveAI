@@ -1,11 +1,19 @@
-import { Header } from "@/components/header"
-import { EmergencyDashboard } from "@/components/emergency-dashboard"
+import { Hero } from "@/components/landing/hero"
+import { LandingNav } from "@/components/landing/landing-nav"
+import { CtaBand, LandingFooter, MapSection, PipelineSection, PrioritySection } from "@/components/landing/sections"
 
-export default function Home() {
+export default function LandingPage() {
   return (
-    <main className="min-h-screen bg-background">
-      <Header />
-      <EmergencyDashboard />
-    </main>
+    <div className="min-h-screen overflow-x-clip bg-background">
+      <LandingNav />
+      <main>
+        <Hero />
+        <PipelineSection />
+        <PrioritySection />
+        <MapSection />
+        <CtaBand />
+      </main>
+      <LandingFooter />
+    </div>
   )
 }

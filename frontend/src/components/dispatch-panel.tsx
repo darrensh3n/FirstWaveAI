@@ -1,7 +1,8 @@
 "use client"
 
-import { Ambulance, Flame, Shield, AlertTriangle, Check, X, Settings2, MessageCircleQuestion } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle, CardTile } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
 export type DispatchRecommendation = {
@@ -19,36 +20,37 @@ interface DispatchPanelProps {
   recommendation: DispatchRecommendation
   onApprove: () => void
   onCancel: () => void
-  onOverride?: () => void
   isProcessing: boolean
   hasStartedConversation?: boolean
 }
 
-function ResourceCount({
-  icon: Icon,
-  label,
-  count,
-  color
-}: {
-  icon: React.ElementType
-  label: string
-  count: number
-  color: string
-}) {
-  const isNeeded = count > 0
+// Priority scale (design.md §2.1): text color, card fill @ 8–10%, border @ 30%.
+const PRIORITY_STYLES: Record<string, { text: string; card: string; description: string }> = {
+  P1: { text: "text-p1", card: "bg-p1/10 border-p1/30", description: "Life-threatening, immediate response" },
+  P2: { text: "text-p2", card: "bg-p2/10 border-p2/30", description: "Urgent, serious but stable" },
+  P3: { text: "text-p3", card: "bg-p3/10 border-p3/30", description: "Needs a response, not time-critical" },
+  P4: { text: "text-p4", card: "bg-p4/10 border-p4/30", description: "Low priority, can wait" },
+}
+
+const STATUS_BADGE = {
+  pending: { label: "Awaiting approval", className: "bg-warning/12 text-warning" },
+  approved: { label: "Dispatched", className: "bg-success/12 text-success" },
+  cancelled: { label: "Cancelled", className: "bg-card-raised text-muted-foreground" },
+} as const
+
+function UnitTile({ label, count }: { label: string; count: number }) {
   return (
-    <div className="flex items-center justify-between py-2">
-      <div className="flex items-center gap-2">
-        <Icon className={cn("w-4 h-4", color)} />
-        <span className="text-sm text-foreground">{label}</span>
-      </div>
-      <span className={cn(
-        "text-sm font-semibold",
-        isNeeded ? color : "text-muted-foreground"
-      )}>
-        {isNeeded ? "Yes" : "No"}
+    <CardTile className="flex flex-col items-center justify-center gap-0.5 py-3">
+      <span
+        className={cn(
+          "font-display text-2xl font-bold leading-none tabular-nums",
+          count > 0 ? "text-foreground" : "text-subtle-foreground"
+        )}
+      >
+        {count}
       </span>
-    </div>
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </CardTile>
   )
 }
 
@@ -56,184 +58,101 @@ export function DispatchPanel({
   recommendation,
   onApprove,
   onCancel,
-  onOverride,
   isProcessing,
   hasStartedConversation = false,
 }: DispatchPanelProps) {
-  const { ems, fire, police, priority, status, specialUnits, needsMoreInfo, rationale } = recommendation
-
-  const priorityColors: Record<string, string> = {
-    P1: "text-rose-500 bg-rose-500/20",
-    P2: "text-orange-500 bg-orange-500/20",
-    P3: "text-amber-500 bg-amber-500/20",
-    P4: "text-emerald-500 bg-emerald-500/20",
-  }
-
-  const priorityDescriptions: Record<string, string> = {
-    P1: "Life-threatening, immediate response",
-    P2: "Urgent, serious but stable",
-    P3: "Non-urgent, needs response",
-    P4: "Low priority, can wait",
-  }
-
-  const statusConfig = {
-    pending: { label: "Pending", color: "text-amber-500", bg: "bg-amber-500/20" },
-    approved: { label: "Approved", color: "text-emerald-500", bg: "bg-emerald-500/20" },
-    cancelled: { label: "Cancelled", color: "text-muted-foreground", bg: "bg-muted" },
-  }
-
-  const currentStatus = statusConfig[status]
+  const { ems, fire, police, priority, status, specialUnits, rationale } = recommendation
+  const priorityStyle = priority ? PRIORITY_STYLES[priority] : undefined
+  const hasRecommendation = Boolean(priority)
+  const badge = status === "pending" && !hasRecommendation ? null : STATUS_BADGE[status]
+  const actionsDisabled = isProcessing || status !== "pending" || !priority
 
   return (
-    <div className="rounded-xl border border-border bg-card h-full flex flex-col">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-foreground text-sm">Dispatch</h3>
-              <span className={cn(
-                "text-xs px-2 py-0.5 rounded-full font-medium",
-                currentStatus.bg,
-                currentStatus.color
-              )}>
-                {currentStatus.label}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground">Resource recommendation</p>
-          </div>
-          {onOverride && (
-            <Button variant="ghost" size="icon" className="w-8 h-8" onClick={onOverride} aria-label="Override dispatch recommendation">
-              <Settings2 className="w-4 h-4" />
-            </Button>
+    <Card className="h-full">
+      <CardHeader>
+        <CardTitle>Dispatch</CardTitle>
+        <CardAction>
+          {badge && (
+            <span className={cn("rounded-md px-2 py-1 text-xs font-semibold", badge.className)}>{badge.label}</span>
           )}
-        </div>
-      </div>
+        </CardAction>
+      </CardHeader>
 
-      {/* Recommendations */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Priority Badge */}
-        {priority && (
-          <div className="flex flex-col items-center justify-center gap-1">
-            <div className={cn(
-              "px-4 py-2 rounded-lg text-center",
-              priorityColors[priority] || "text-muted-foreground bg-muted"
-            )}>
-              <p className="text-xs uppercase tracking-wider opacity-80">Priority</p>
-              <p className="text-2xl font-bold">{priority}</p>
-            </div>
-            <p className="text-xs text-muted-foreground text-center">
-              {priorityDescriptions[priority] || "Unknown priority level"}
-            </p>
+      <CardContent
+        className="flex min-h-0 flex-col gap-4 overflow-y-auto"
+        aria-live={priority === "P1" ? "assertive" : "polite"}
+      >
+        {/* Priority card */}
+        {priority ? (
+          <div
+            className={cn(
+              "flex items-center gap-4 rounded-tile border px-4 py-3.5",
+              priorityStyle?.card ?? "border-border bg-card-raised"
+            )}
+          >
+            <span
+              className={cn(
+                "font-display text-[34px] font-bold leading-none",
+                priorityStyle?.text ?? "text-foreground"
+              )}
+            >
+              {priority}
+            </span>
+            <span className="text-sm text-foreground">
+              {priorityStyle?.description ?? "Unknown priority level"}
+            </span>
+          </div>
+        ) : (
+          <div className="flex min-h-[66px] items-center gap-3 rounded-tile border border-dashed border-border-strong px-4 py-3.5 text-sm text-muted-foreground">
+            {isProcessing ? (
+              <>
+                <Loader2 className="size-4 animate-spin text-primary" aria-hidden />
+                Analyzing the call…
+              </>
+            ) : hasStartedConversation ? (
+              "More details needed before a recommendation. Ask the caller the questions in the transcript."
+            ) : (
+              "No recommendation yet"
+            )}
           </div>
         )}
 
-        {/* Rationale - Human-readable recommendation */}
-        {rationale && (
-          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-            <p className="text-sm text-foreground leading-relaxed">{rationale}</p>
-          </div>
-        )}
-
-        {/* Resource Counts */}
-        <div className="rounded-lg border border-border bg-secondary/30 p-3">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Recommended</p>
-          <div className="divide-y divide-border">
-            <ResourceCount
-              icon={Ambulance}
-              label="EMS"
-              count={ems}
-              color="text-rose-500"
-            />
-            <ResourceCount
-              icon={Flame}
-              label="Fire"
-              count={fire}
-              color="text-orange-500"
-            />
-            <ResourceCount
-              icon={Shield}
-              label="Police"
-              count={police}
-              color="text-sky-500"
-            />
-          </div>
+        {/* Unit counts */}
+        <div className="grid grid-cols-3 gap-2.5">
+          <UnitTile label="EMS" count={ems} />
+          <UnitTile label="Fire" count={fire} />
+          <UnitTile label="Police" count={police} />
         </div>
 
-        {/* Special Units */}
         {specialUnits && specialUnits.length > 0 && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-              <p className="text-xs text-amber-500 uppercase tracking-wider font-medium">Special Units</p>
-            </div>
-            <ul className="space-y-1">
+          <div className="space-y-2">
+            <p className="field-label">Special units</p>
+            <div className="flex flex-wrap gap-1.5">
               {specialUnits.map((unit) => (
-                <li key={unit} className="text-sm text-foreground flex items-center gap-2">
-                  <span className="text-amber-500">•</span>
+                <span key={unit} className="rounded-full bg-card-raised px-2.5 py-1 text-xs text-foreground">
                   {unit}
-                </li>
+                </span>
               ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Empty State - Waiting for more info */}
-        {!isProcessing && ems === 0 && fire === 0 && police === 0 && !priority && hasStartedConversation && (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="w-12 h-12 rounded-full bg-sky-500/20 flex items-center justify-center mb-3">
-              <MessageCircleQuestion className="w-6 h-6 text-sky-500" />
             </div>
-            <p className="text-sm font-medium text-foreground">Gathering Information</p>
-            <p className="text-xs text-muted-foreground mt-1 max-w-[200px]">
-              More details needed before dispatch recommendation
-            </p>
-            <p className="text-xs text-sky-500 mt-2">
-              Answer the questions in the chat
-            </p>
           </div>
         )}
 
-        {/* Empty State - Not started */}
-        {!isProcessing && ems === 0 && fire === 0 && police === 0 && !priority && !hasStartedConversation && (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <AlertTriangle className="w-8 h-8 text-muted-foreground/50 mb-2" />
-            <p className="text-sm text-muted-foreground">No recommendation yet</p>
-            <p className="text-xs text-muted-foreground/70 mt-1">Start recording to analyze</p>
+        {rationale && (
+          <div className="space-y-1.5">
+            <p className="field-label">Rationale</p>
+            <p className="text-sm leading-relaxed text-foreground">{rationale}</p>
           </div>
         )}
+      </CardContent>
 
-        {/* Processing State */}
-        {isProcessing && (
-          <div className="flex flex-col items-center justify-center py-4 text-center">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-2" />
-            <p className="text-sm text-muted-foreground">Analyzing...</p>
-          </div>
-        )}
-      </div>
-
-      {/* Action Buttons */}
-      <div className="p-4 border-t border-border flex-shrink-0">
-        <div className="flex gap-2">
-          <Button
-            onClick={onApprove}
-            disabled={isProcessing || status !== "pending" || !priority}
-            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-          >
-            <Check className="w-4 h-4 mr-2" />
-            APPROVE
-          </Button>
-          <Button
-            onClick={onCancel}
-            disabled={isProcessing || status !== "pending" || !priority}
-            variant="outline"
-            className="flex-1 border-destructive/50 text-destructive hover:bg-destructive/10"
-          >
-            <X className="w-4 h-4 mr-2" />
-            CANCEL
-          </Button>
-        </div>
-      </div>
-    </div>
+      <CardFooter className="border-t-0 pt-0">
+        <Button onClick={onApprove} disabled={actionsDisabled} className="flex-1">
+          Approve dispatch
+        </Button>
+        <Button onClick={onCancel} disabled={actionsDisabled} variant="outline" className="flex-1">
+          Cancel
+        </Button>
+      </CardFooter>
+    </Card>
   )
 }
